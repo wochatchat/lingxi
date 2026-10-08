@@ -113,6 +113,9 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
 
+    // F18 配置持久化
+    implementation(libs.androidx.datastore.preferences)
+
     // DI (Hilt) — PRD 技术栈
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
