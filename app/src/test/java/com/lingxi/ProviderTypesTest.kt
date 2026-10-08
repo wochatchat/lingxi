@@ -2,6 +2,7 @@ package com.lingxi
 
 import com.lingxi.data.ProviderCodec
 import com.lingxi.data.ProviderConfig
+import com.lingxi.data.ProviderKind
 import com.lingxi.data.chatCompletionsUrl
 import com.lingxi.data.maskKey
 import com.lingxi.data.newProviderId
@@ -47,8 +48,7 @@ class ProviderTypesTest {
     fun codecRoundTrip() {
         val list = listOf(
             ProviderConfig("p1", "DeepSeek", kind = com.lingxi.data.ProviderKind.CLOUD, baseUrl = "https://api.deepseek.com/v1", model = "deepseek-chat"),
-            ProviderConfig("p2", "中转", kind = ProviderKind.RELAY, "https://gw.io/v1", "gpt-4o-mini", enabled = false),
-        )
+            ProviderConfig("p2", "中转", kind = ProviderKind.RELAY, "https://gw.io/v1", "gpt-4o-mini", enabled = false),        )
         val decoded = ProviderCodec.decode(ProviderCodec.encode(list))
         assertEquals(list, decoded)
     }
