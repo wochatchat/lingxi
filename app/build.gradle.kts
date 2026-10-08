@@ -122,6 +122,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
 
+    // F18: API Key 加密存储（AndroidKeyStore + EncryptedSharedPreferences）
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

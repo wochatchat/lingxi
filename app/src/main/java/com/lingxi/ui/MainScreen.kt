@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -36,10 +39,19 @@ val PlannedModules = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    onOpenProviders: () -> Unit = {},
+) {
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(com.lingxi.R.string.app_name)) })
+            TopAppBar(
+                title = { Text(stringResource(com.lingxi.R.string.app_name)) },
+                actions = {
+                    IconButton(onClick = onOpenProviders) {
+                        Icon(Icons.Filled.Settings, contentDescription = "AI 服务配置")
+                    }
+                },
+            )
         },
     ) { padding ->
         androidx.compose.foundation.layout.Column(
