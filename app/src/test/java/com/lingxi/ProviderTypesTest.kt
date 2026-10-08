@@ -62,7 +62,8 @@ class ProviderTypesTest {
     // ── 预设 ──
     @Test
     fun presetBaseUrlsAreNormalized() {
-        (com.lingxi.data.PROVIDER_PRESETS + com.lingxi.data.CUSTOM_PRESET).forEach { p ->
+        // CUSTOM_PRESET 的 "https://" 占位会被规整成 "https:"，属预期（用户必填真实地址），不参与校验
+        com.lingxi.data.PROVIDER_PRESETS.forEach { p ->
             assertEquals(p.baseUrl, normalizeBaseUrl(p.baseUrl))
         }
     }

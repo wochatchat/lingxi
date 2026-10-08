@@ -5,6 +5,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 /** Provider 类别：云厂商直连 / 自定义中转站 / 本地（Ollama 等） */
+@kotlinx.serialization.Serializable
 enum class ProviderKind { CLOUD, RELAY, LOCAL }
 
 /**
