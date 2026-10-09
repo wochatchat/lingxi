@@ -166,10 +166,7 @@ class FloatingCapsuleService : Service() {
 
     // ---------- 常听管线（连续采集 → 能量 VAD → 语音段 → ASR → 引擎） ----------
 
-    /**
-     * VAD 挂起条件（回声防护）：引擎非空闲（正在 ASR/LLM/TTS）或 PTT 录音中。
-     * 挂起期间仍持续读取排空缓冲，只是不喂 VAD。
-     */
+    /** 挂起条件（回声防护）：PTT 录音中，或引擎处于 识别/思考/出错 态。 */
     private fun vadSuppressed(): Boolean =
         pttRecording || engine.state.value !is ConvState.Idle
 
@@ -183,38 +180,61 @@ class FloatingCapsuleService : Service() {
             val prebuf = ArrayDeque<ByteArray>()       // 语音起点前 600ms 预缓冲
             var collected = mutableListOf<ByteArray>() // 当前语音段
             var speechMs = 0
+            val bargeGate = BargeInGate()
+            var bargeCooldownUntil = 0L
             try {
                 while (isActive) {
-                    if (vadSuppressed()) {
-                        vad.reset()
-                        prebuf.clear()
-                        collected = mutableListOf()
-                        speechMs = 0
-                        mic.read()
-                        continue
-                    }
                     val data = mic.read() ?: break
                     val rms = rmsOfPcm(data)
-                    prebuf.addLast(data)
-                    while (prebuf.size > PREBUF_CHUNKS) prebuf.removeFirst()
-                    when (vad.feed(rms, ContinuousMic.CHUNK_MS)) {
-                        VadEvent.SpeechStart -> {
-                            collected = prebuf.toMutableList()
+                    val state = engine.state.value
+                    when {
+                        // 挂起：PTT / 识别 / 思考 / 出错——只排空缓冲不判定（回声防护）
+                        pttRecording || (state !is ConvState.Idle && state !is ConvState.Speaking) -> {
+                            vad.reset()
+                            bargeGate.reset()
                             prebuf.clear()
-                            speechMs = 0
-                        }
-                        VadEvent.SpeechEnd -> {
-                            finishSegment(collected)
                             collected = mutableListOf()
                             speechMs = 0
                         }
-                        null -> if (collected.isNotEmpty()) {
-                            collected.add(data)
-                            speechMs += ContinuousMic.CHUNK_MS
-                            if (speechMs >= MAX_SEGMENT_MS) { // 30s 上限强制收段
-                                finishSegment(collected)
+                        // 播报中：barge-in 窗口——持续人声覆盖播报则立即打断
+                        state is ConvState.Speaking -> {
+                            vad.reset()
+                            prebuf.clear()
+                            if (bargeGate.feed(rms, ContinuousMic.CHUNK_MS)) {
+                                engine.cancel()
+                                bargeCooldownUntil = System.currentTimeMillis() + BARGE_IN_COOLDOWN_MS
                                 collected = mutableListOf()
                                 speechMs = 0
+                            }
+                        }
+                        // 打断后冷却：等喇叭回声尾音衰减再恢复常听判定
+                        System.currentTimeMillis() < bargeCooldownUntil -> {
+                            vad.reset()
+                            prebuf.clear()
+                        }
+                        else -> {
+                            prebuf.addLast(data)
+                            while (prebuf.size > PREBUF_CHUNKS) prebuf.removeFirst()
+                            when (vad.feed(rms, ContinuousMic.CHUNK_MS)) {
+                                VadEvent.SpeechStart -> {
+                                    collected = prebuf.toMutableList()
+                                    prebuf.clear()
+                                    speechMs = 0
+                                }
+                                VadEvent.SpeechEnd -> {
+                                    finishSegment(collected)
+                                    collected = mutableListOf()
+                                    speechMs = 0
+                                }
+                                null -> if (collected.isNotEmpty()) {
+                                    collected.add(data)
+                                    speechMs += ContinuousMic.CHUNK_MS
+                                    if (speechMs >= MAX_SEGMENT_MS) { // 30s 上限强制收段
+                                        finishSegment(collected)
+                                        collected = mutableListOf()
+                                        speechMs = 0
+                                    }
+                                }
                             }
                         }
                     }
@@ -555,6 +575,7 @@ class FloatingCapsuleService : Service() {
         private const val CARD_WIDTH_DP = 250
         private const val PREBUF_CHUNKS = 6          // 语音起点前 600ms 预缓冲
         private const val MAX_SEGMENT_MS = 30_000    // 单段语音上限
+        private const val BARGE_IN_COOLDOWN_MS = 500 // 打断后等回声尾音衰减
 
         const val ACTION_STOP = "com.lingxi.action.CAPSULE_STOP"
 

@@ -1,6 +1,7 @@
 package com.lingxi.data
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +37,9 @@ class ConversationEngine @javax.inject.Inject constructor(
 
     private val messages = ArrayDeque<ChatMessage>()
 
+    /** 正在跑的回合协程：cancel 时连根取消，防止旧回合在打断后继续落账/改状态 */
+    @Volatile private var currentJob: Job? = null
+
     /**
      * 跑一轮对话。挂起直到 LLM 流结束且 TTS 播完。
      * 协程取消（barge-in 前身）时停播并上抛取消。
@@ -48,6 +52,7 @@ class ConversationEngine @javax.inject.Inject constructor(
     ) {
         val user = userText.trim()
         if (user.isEmpty()) return
+        currentJob = kotlinx.coroutines.coroutineContext[kotlinx.coroutines.Job]
         val reply = StringBuilder()
         try {
             val request = buildList {
@@ -110,7 +115,10 @@ class ConversationEngine @javax.inject.Inject constructor(
         runTurn(text, apiKey, baseUrl, model)
     }
 
+    /** barge-in/手动打断：停播 + 取消正在跑的回合（runTurn 内部会清缓冲上抛取消） */
     fun cancel() {
+        currentJob?.cancel()
+        currentJob = null
         tts.stop()
         _state.value = ConvState.Idle
     }

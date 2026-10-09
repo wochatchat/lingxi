@@ -75,9 +75,10 @@ class ConversationViewModel @Inject constructor(
         _ui.value = _ui.value.copy(micGranted = granted)
     }
 
-    /** 按下：开始录音（采集循环在 IO 线程） */
+    /** 按下：开始录音（采集循环在 IO 线程）。正在播报/思考则先打断（barge-in） */
     fun startListening() {
         if (!_ui.value.micGranted || _ui.value.recording) return
+        if (engine.state.value !is ConvState.Idle) engine.cancel()
         val rec = MicRecorder()
         if (!rec.start()) {
             _ui.value = _ui.value.copy(recording = false)
