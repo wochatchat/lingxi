@@ -33,6 +33,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 耳语胶囊（R3）：specialUse 悬浮对话卡片；常听开启时叠加 microphone -->
+        <service
+            android:name=".service.FloatingCapsuleService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|microphone">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="voice_assistant_overlay" />
+        </service>
     </application>
 
 </manifest>

@@ -9,11 +9,9 @@ import androidx.lifecycle.viewModelScope
 import com.lingxi.data.ConvState
 import com.lingxi.data.ConvTurn
 import com.lingxi.data.ConversationEngine
-import com.lingxi.data.LlmClient
 import com.lingxi.data.MicRecorder
-import com.lingxi.data.OpenAiAsrEngine
 import com.lingxi.data.ProviderRepository
-import com.lingxi.data.SystemTtsEngine
+import com.lingxi.data.VoiceTurnRunner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,10 +38,10 @@ data class ConvUiState(
 class ConversationViewModel @Inject constructor(
     application: Application,
     private val repo: ProviderRepository,
-    private val tts: SystemTtsEngine,
+    private val engine: ConversationEngine,
+    private val runner: VoiceTurnRunner,
 ) : AndroidViewModel(application) {
 
-    private val engine = ConversationEngine(LlmClient(), tts)
     private var recorder: MicRecorder? = null
     private var captureJob: Job? = null
 
@@ -94,7 +92,7 @@ class ConversationViewModel @Inject constructor(
         }
     }
 
-    /** 松开：停采集 →（去静音）→ 云 ASR → LLM 流式 → TTS 播报 */
+    /** 松开：停采集 →（去静音）→ 云 ASR → LLM 流式 → TTS 播报（与胶囊共用 runner） */
     fun stopListening() {
         val rec = recorder ?: return
         recorder = null
@@ -105,17 +103,9 @@ class ConversationViewModel @Inject constructor(
                 _ui.value = _ui.value.copy(engineState = ConvState.Failed("", "没有录到声音"))
                 return@launch
             }
-            val provider = repo.firstEnabled()
-            if (provider == null) {
+            if (!runner.runVoiceTurn(pcm, rate)) {
                 _ui.value = _ui.value.copy(engineState = ConvState.Failed("", "请先在设置里配置一个 AI 服务"))
-                return@launch
             }
-            val (config, key) = provider
-            val asrEngine = OpenAiAsrEngine().apply {
-                currentBaseUrl = config.baseUrl
-                currentApiKey = key
-            }
-            engine.runVoiceTurn(pcm, rate, asrEngine, key, config.baseUrl, config.model)
         }
     }
 

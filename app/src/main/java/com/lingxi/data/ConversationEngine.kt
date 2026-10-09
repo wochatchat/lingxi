@@ -22,11 +22,12 @@ data class ConvTurn(val user: String, val reply: String)
  * 输入文本（ASR 在 VM 层完成）→ LLM 流式 → 句切分 → TTS 队列播报。
  * barge-in 打断、G 级门控、常听管线在 R3/R4 接入；本类保持纯级联语义。
  */
-class ConversationEngine(
+@javax.inject.Singleton
+class ConversationEngine @javax.inject.Inject constructor(
     private val llm: LlmStream,
     private val tts: TtsEngine,
-    private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
 ) {
+    private val systemPrompt = DEFAULT_SYSTEM_PROMPT
     private val _state = MutableStateFlow<ConvState>(ConvState.Idle)
     val state: StateFlow<ConvState> = _state.asStateFlow()
 

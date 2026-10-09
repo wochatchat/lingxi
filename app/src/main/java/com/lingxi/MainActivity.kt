@@ -23,12 +23,16 @@ class MainActivity : ComponentActivity() {
                 // R1：两屏状态切换足够；R3 胶囊/对话卡片多起来后再上 navigation-compose
                 var screen by remember { mutableStateOf(Screen.HOME) }
                 when (screen) {
-                    Screen.HOME -> MainScreen(onOpenProviders = { screen = Screen.PROVIDERS })
+                    Screen.HOME -> MainScreen(
+                        onOpenProviders = { screen = Screen.PROVIDERS },
+                        onOpenGeneral = { screen = Screen.GENERAL },
+                    )
                     Screen.PROVIDERS -> ProviderSettingsScreen(onBack = { screen = Screen.HOME })
+                    Screen.GENERAL -> com.lingxi.ui.settings.GeneralSettingsScreen(onBack = { screen = Screen.HOME })
                 }
             }
         }
     }
 }
 
-private enum class Screen { HOME, PROVIDERS }
+private enum class Screen { HOME, PROVIDERS, GENERAL }
