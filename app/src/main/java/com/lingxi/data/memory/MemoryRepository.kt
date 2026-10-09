@@ -92,8 +92,9 @@ class MemoryRepository @Inject constructor(
         val pending = withContext(Dispatchers.IO) { dao.pendingTurns(startOfToday, PENDING_LIMIT) }
         if (pending.isEmpty()) return
         val byDate = pending.groupBy { dateStringOf(it.createdAt) }
-        for ((date, turns) in byDate.entries.takeLast(MAX_PENDING_DAYS)) {
-            summarizeOneDay(date, turns) ?: continue
+        val datesToProcess = byDate.keys.sorted().takeLast(MAX_PENDING_DAYS)
+        for (date in datesToProcess) {
+            summarizeOneDay(date, byDate[date].orEmpty()) ?: continue
         }
         withContext(Dispatchers.IO) { dao.pruneSummaries(SUMMARY_KEEP_DAYS) }
     }
