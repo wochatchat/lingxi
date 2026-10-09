@@ -2,6 +2,8 @@ package com.lingxi.di
 
 import com.lingxi.data.LlmClient
 import com.lingxi.data.LlmStream
+import com.lingxi.data.SystemTtsEngine
+import com.lingxi.data.TtsEngine
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -16,4 +18,8 @@ object EngineModule {
     @Provides
     @Singleton
     fun provideLlmStream(): LlmStream = LlmClient()
+
+    @Provides
+    @Singleton
+    fun provideTtsEngine(impl: SystemTtsEngine): TtsEngine = impl
 }
