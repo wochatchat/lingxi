@@ -2,6 +2,7 @@ package com.lingxi.data
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,7 +53,7 @@ class ConversationEngine @javax.inject.Inject constructor(
     ) {
         val user = userText.trim()
         if (user.isEmpty()) return
-        currentJob = kotlinx.coroutines.coroutineContext[kotlinx.coroutines.Job]
+        currentJob = currentCoroutineContext()[Job]
         val reply = StringBuilder()
         try {
             val request = buildList {

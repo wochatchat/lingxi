@@ -43,7 +43,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lingxi.util.BrandGuide
-import com.lingxi.util.GENERIC
 import com.lingxi.util.brandGuideFor
 
 /**
@@ -68,7 +67,7 @@ fun FirstRunGuideScreen(onComplete: () -> Unit) {
     val notifyOk = remember(refresh) { NotificationManagerCompat.from(context).areNotificationsEnabled() }
     val overlayOk = remember(refresh) { SystemSettings.canDrawOverlays(context) }
     val batteryOk = remember(refresh) { batteryIgnored(context) }
-    val brand = remember { brandGuideFor(Build.MANUFACTURER) ?: GENERIC }
+    val brand = remember { brandGuideFor(Build.MANUFACTURER) ?: BrandGuide.GENERIC }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(

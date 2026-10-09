@@ -51,7 +51,7 @@ class SentenceSplitter(
 
     companion object {
         val SENTENCE_ENDS = charArrayOf('。', '！', '？', '!', '?', '；', ';', '…', '\n')
-        val PAUSE_ENDS = charArrayOf('，', ',', '、', '：', ':', '——')
+        val PAUSE_ENDS = charArrayOf('，', ',', '、', '：', ':')
     }
 }
 

@@ -27,7 +27,7 @@ class SettingsRepository @javax.inject.Inject constructor(
     private val firstLaunchDoneKey = booleanPreferencesKey("first_launch_done")
 
     /** F15 首启引导：完成过引导页（默认 false = 待引导） */
-    val firstLaunchDone: Flow<Boolean> = context.settingsDataStore.data.map { it[firstLaunchKey] ?: false }
+    val firstLaunchDone: Flow<Boolean> = context.settingsDataStore.data.map { it[firstLaunchDoneKey] ?: false }
 
     val capsuleEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[capsuleKey] ?: false }
     val alwaysListenEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[alwaysListenKey] ?: false }
@@ -41,6 +41,6 @@ class SettingsRepository @javax.inject.Inject constructor(
     }
 
     suspend fun setFirstLaunchDone(done: Boolean) {
-        context.settingsDataStore.edit { it[firstLaunchKey] = done }
+        context.settingsDataStore.edit { it[firstLaunchDoneKey] = done }
     }
 }

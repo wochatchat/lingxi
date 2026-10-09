@@ -1,6 +1,6 @@
 package com.lingxi
 
-import com.lingxi.util.GENERIC
+import com.lingxi.util.BrandGuide
 import com.lingxi.util.brandGuideFor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -36,6 +36,6 @@ class BrandGuideTest {
         assertNull(brandGuideFor("Google"))
         assertNull(brandGuideFor(""))
         // 通用兜底由调用方提供
-        assertTrue(GENERIC.entryComponents.isEmpty())
+        assertTrue(BrandGuide.GENERIC.entryComponents.isEmpty())
     }
 }
