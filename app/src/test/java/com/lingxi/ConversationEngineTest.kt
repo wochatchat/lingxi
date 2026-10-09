@@ -142,8 +142,8 @@ class ConversationEngineTest {
             FakeLlm(listOf(LlmEvent.Delta("好的。"), LlmEvent.Completed("stop"))),
             tts,
             FakeMemoryStore(),
-        ,
-            fakeExecutor())
+            fakeExecutor(),
+        )
         engine.runVoiceTurn(ByteArray(100), 16_000, FakeAsr("几点了"), "k", "u", "m")
         assertEquals(listOf("好的。"), tts.spoken)
         assertEquals(ConvState.Idle, engine.state.value)
@@ -157,8 +157,8 @@ class ConversationEngineTest {
             FakeLlm(listOf(LlmEvent.Delta("**重点**：先吃饭。"), LlmEvent.Completed("stop"))),
             tts,
             FakeMemoryStore(),
-        ,
-            fakeExecutor())
+            fakeExecutor(),
+        )
         engine.runTurn("q", "k", "u", "m")
         assertEquals(listOf("重点：先吃饭。"), tts.spoken)
     }
