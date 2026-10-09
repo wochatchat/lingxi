@@ -4,6 +4,7 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -36,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +57,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.lingxi.R
 import com.lingxi.data.ConvState
 import com.lingxi.data.ConvTurn
+import com.lingxi.data.UiAction
 
 /**
  * 对话主页（R2）：按住说话（push-to-talk）+ 文本兜底 + 流式状态展示。
@@ -91,6 +94,11 @@ fun MainScreen(
                 .padding(horizontal = 16.dp),
         ) {
             ConvHistory(history = ui.history, modifier = Modifier.weight(1f))
+            PendingUiRow(
+                pending = ui.pending,
+                onChoice = vm::onUiChoice,
+                onConfirm = vm::onUiConfirm,
+            )
             StateLine(ui.engineState)
             ConvInputBar(
                 recording = ui.recording,
@@ -134,6 +142,125 @@ private fun ConvHistory(history: List<ConvTurn>, modifier: Modifier = Modifier) 
         items(history) { turn ->
             Bubble(text = turn.user, mine = true)
             Bubble(text = turn.reply.ifBlank { "（没有回答）" }, mine = false)
+            TurnUiCards(turn.ui)
+        }
+    }
+}
+
+/** 历史轮次上挂靠的 Stream-UI 卡片（状态即快照，可回放） */
+@Composable
+private fun TurnUiCards(actions: List<UiAction>) {
+    for (action in actions) {
+        when (action.type) {
+            UiAction.UiType.ChoiceSheet -> Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                modifier = Modifier.padding(start = 4.dp),
+            ) {
+                Column(Modifier.padding(10.dp)) {
+                    Text(action.title, style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        action.resolvedText
+                            ?: action.options.mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("　"),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp).widthIn(max = 300.dp),
+                    )
+                }
+            }
+            UiAction.UiType.ConfirmGate -> Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                modifier = Modifier.padding(start = 4.dp),
+            ) {
+                Column(Modifier.padding(10.dp)) {
+                    Text("🔔 ${action.title}", style = MaterialTheme.typography.labelMedium)
+                    action.body?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 2.dp).widthIn(max = 300.dp))
+                    }
+                    action.resolvedText?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
+            }
+            UiAction.UiType.InfoCard -> Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.padding(start = 4.dp),
+            ) {
+                Column(Modifier.padding(10.dp)) {
+                    Text("✓ ${action.title}", style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    action.body?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 2.dp).widthIn(max = 300.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 挂起中的 UI 原语（本回合等待用户应答）：ChoiceSheet chips / ConfirmGate 按钮。
+ * 语音通道等价：说"第 N 个"或"确认/取消"同样生效（engine 解析）。
+ */
+@Composable
+private fun PendingUiRow(
+    pending: UiAction?,
+    onChoice: (Int) -> Unit,
+    onConfirm: (Boolean) -> Unit,
+) {
+    val p = pending ?: return
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(p.title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            p.body?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 2.dp))
+            }
+            when (p.type) {
+                UiAction.UiType.ChoiceSheet -> {
+                    p.options.forEachIndexed { i, opt ->
+                        Text(
+                            "第${i + 1}个 · $opt",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .clickable { onChoice(i) }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                        )
+                    }
+                    Text("点选上方选项，或说\"第 N 个\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp))
+                }
+                UiAction.UiType.ConfirmGate -> {
+                    Row(
+                        modifier = Modifier.padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        TextButton(onClick = { onConfirm(false) }) { Text(p.cancelLabel) }
+                        TextButton(onClick = { onConfirm(true) }) { Text(p.confirmLabel) }
+                    }
+                }
+                UiAction.UiType.InfoCard -> Unit
+            }
         }
     }
 }

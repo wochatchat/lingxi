@@ -142,6 +142,7 @@ class MemoryRepository @Inject constructor(
         flow.collect { ev ->
             when (ev) {
                 is LlmEvent.Delta -> sb.append(ev.text)
+                is LlmEvent.ToolCall -> Unit // 摘要/画像提取不使用工具
                 is LlmEvent.Failed -> failed = true
                 is LlmEvent.Completed -> Unit
             }

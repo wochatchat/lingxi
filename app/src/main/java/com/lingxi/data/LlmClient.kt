@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.Serializable
+import com.lingxi.data.functions.ToolSpec
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -31,15 +32,28 @@ import java.util.concurrent.TimeUnit
 @Serializable
 data class ChatMessage(val role: String, val content: String)
 
-/** 流式事件：增量文本 / 正常结束 / 失败（带可定位信息） */
+/** 流式事件：增量文本 / 工具调用 / 正常结束 / 失败（带可定位信息） */
 sealed interface LlmEvent {
     data class Delta(val text: String) : LlmEvent
+    data class ToolCall(val name: String, val argsJson: String) : LlmEvent
     data class Completed(val finishReason: String?) : LlmEvent
     data class Failed(val message: String, val httpCode: Int? = null) : LlmEvent
 }
 
+/** 一条 tool_call 流式增量（按 index 分片到达，由客户端聚合） */
+data class ToolCallDelta(
+    val index: Int,
+    val name: String?,
+    val argsFragment: String?,
+)
+
 /** 一行 SSE 解析结果（纯函数可测） */
-data class SseChunk(val deltaText: String?, val finishReason: String?, val done: Boolean)
+data class SseChunk(
+    val deltaText: String?,
+    val finishReason: String?,
+    val done: Boolean,
+    val toolCallDelta: ToolCallDelta? = null,
+)
 
 /**
  * 解析一行 OpenAI-compatible SSE。
@@ -55,10 +69,22 @@ fun parseSseLine(line: String): SseChunk? {
         val obj = Json.parseToJsonElement(payload).jsonObject
         val choices = obj["choices"] as? JsonArray ?: return@runCatching SseChunk(null, null, done = false)
         val first = choices.firstOrNull() as? JsonObject
-        val deltaText = (first?.get("delta") as? JsonObject)
-            ?.get("content")?.jsonPrimitive?.contentOrNull
+        val delta = first?.get("delta") as? JsonObject
+        val deltaText = delta?.get("content")?.jsonPrimitive?.contentOrNull
         val finish = (first?.get("finish_reason") as? JsonPrimitive)?.contentOrNull
-        SseChunk(deltaText, finish, done = false)
+        // tool_calls 分片：delta.tool_calls = [{index, function:{name?, arguments?}}]
+        val toolDelta = (delta?.get("tool_calls") as? JsonArray)
+            ?.firstOrNull() as? JsonObject
+            ?.let { tc ->
+                val idx = (tc["index"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
+                val fn = tc["function"] as? JsonObject
+                ToolCallDelta(
+                    index = idx,
+                    name = fn?.get("name")?.jsonPrimitive?.contentOrNull,
+                    argsFragment = fn?.get("arguments")?.jsonPrimitive?.contentOrNull,
+                )
+            }
+        SseChunk(deltaText, finish, done = false, toolCallDelta = toolDelta)
     }.getOrNull()
 }
 
@@ -72,6 +98,7 @@ interface LlmStream {
         model: String,
         messages: List<ChatMessage>,
         temperature: Double = 0.7,
+        tools: List<ToolSpec>? = null,
     ): Flow<LlmEvent>
 }
 
@@ -88,6 +115,7 @@ class LlmClient(
         model: String,
         messages: List<ChatMessage>,
         temperature: Double,
+        tools: List<ToolSpec>?,
     ): Flow<LlmEvent> = callbackFlow {
         val body = buildJsonObject {
             put("model", model)
@@ -99,6 +127,19 @@ class LlmClient(
             }))
             put("stream", true)
             put("temperature", temperature)
+            // F8 Function Calling tools
+            if (!tools.isNullOrEmpty()) {
+                put("tools", JsonArray(tools.map { spec ->
+                    buildJsonObject {
+                        put("type", "function")
+                        put("function", buildJsonObject {
+                            put("name", spec.name)
+                            put("description", spec.description)
+                            put("parameters", Json.parseToJsonElement(spec.parametersJson))
+                        })
+                    }
+                }))
+            }
         }.toString()
 
         val request = Request.Builder()
@@ -136,13 +177,26 @@ class LlmClient(
                     runCatching {
                         var finishReason: String? = null
                         var sawDone = false
+                        // 聚合 tool_call 分片（index → name/arguments 拼接）
+                        val toolCalls = mutableMapOf<Int, Pair<StringBuilder?, StringBuilder?>>()
                         while (true) {
                             if (closed) return
                             val line = reader.readLine() ?: break
                             val chunk = parseSseLine(line) ?: continue
                             if (chunk.done) { sawDone = true; break }
                             chunk.deltaText?.takeIf { it.isNotEmpty() }?.let { trySend(LlmEvent.Delta(it)) }
+                            chunk.toolCallDelta?.let { tc ->
+                                val pair = toolCalls.getOrPut(tc.index) { StringBuilder() to StringBuilder() }
+                                tc.name?.let { pair.first?.append(it) }
+                                tc.argsFragment?.let { pair.second?.append(it) }
+                            }
                             chunk.finishReason?.let { finishReason = it }
+                        }
+                        // 流结束：先发完整 ToolCall 再 Completed
+                        for ((_, pair) in toolCalls.toSortedMap()) {
+                            val name = pair.first?.toString().orEmpty()
+                            val args = pair.second?.toString().orEmpty()
+                            if (name.isNotBlank()) trySend(LlmEvent.ToolCall(name, args))
                         }
                         trySend(LlmEvent.Completed(finishReason ?: if (sawDone) "stop" else null))
                     }.onFailure { e ->

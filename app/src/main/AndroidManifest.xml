@@ -11,6 +11,17 @@
     <!-- 呈现层（R3 耳语胶囊/对话卡片） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- F8 系统动作：设闹钟（AlarmClock intent 需要） -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
+    <!-- F8 open_app：API 30+ 包可见性，查询带 LAUNCHER 入口的全部应用 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <!-- 前台服务保活：microphone（常听）/ specialUse（胶囊/卡片）按里程碑启用 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />

@@ -11,6 +11,7 @@ import com.lingxi.data.ConvTurn
 import com.lingxi.data.ConversationEngine
 import com.lingxi.data.MicRecorder
 import com.lingxi.data.ProviderRepository
+import com.lingxi.data.UiAction
 import com.lingxi.data.VoiceTurnRunner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,8 @@ data class ConvUiState(
     val micGranted: Boolean = false,
     val hasProvider: Boolean = true,
     val recording: Boolean = false,
+    /** 当前回合等待用户应答的 UI 原语（ChoiceSheet/ConfirmGate） */
+    val pending: UiAction? = null,
 )
 
 /**
@@ -63,6 +66,9 @@ class ConversationViewModel @Inject constructor(
             repo.providers.collect { list ->
                 _ui.value = _ui.value.copy(hasProvider = list.any { it.enabled })
             }
+        }
+        viewModelScope.launch {
+            engine.pendingUi.collect { p -> _ui.value = _ui.value.copy(pending = p) }
         }
     }
 
@@ -130,4 +136,10 @@ class ConversationViewModel @Inject constructor(
         _ui.value = _ui.value.copy(recording = false)
         engine.cancel()
     }
+
+    /** Stream-UI 应答（手势通道）：ChoiceSheet 点选 */
+    fun onUiChoice(index: Int) = engine.onUiChoice(index)
+
+    /** Stream-UI 应答（ConfirmGate 确认/取消） */
+    fun onUiConfirm(confirmed: Boolean) = engine.onUiConfirm(confirmed)
 }

@@ -106,6 +106,7 @@ class ProviderRepository @javax.inject.Inject constructor(
                 ).collect { ev ->
                     when (ev) {
                         is LlmEvent.Delta -> if (ev.text.isNotEmpty()) throw Stop(ev.text, null)
+                        is LlmEvent.ToolCall -> Unit
                         is LlmEvent.Failed -> { failure = ev; throw Stop(null, ev) }
                         is LlmEvent.Completed -> throw Stop(null, null)
                     }

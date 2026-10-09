@@ -60,4 +60,31 @@ class SseParserTest {
         val chunk = parseSseLine(line)!!
         assertNull(chunk.deltaText)
     }
+
+    // ---- F8 tool_calls 分片 ----
+
+    @Test
+    fun parsesToolCallDelta() {
+        val line = """data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"set_alarm"}}]}}]}"""
+        val chunk = parseSseLine(line)!!
+        val tc = chunk.toolCallDelta!!
+        assertEquals(0, tc.index)
+        assertEquals("set_alarm", tc.name)
+        assertNull(tc.argsFragment)
+    }
+
+    @Test
+    fun parsesToolCallArgsFragment() {
+        val line = """data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"hou"}}]}}]}"""
+        val tc = parseSseLine(line)!!.toolCallDelta!!
+        assertEquals(0, tc.index)
+        assertNull(tc.name)
+        assertEquals("{\"hour", tc.argsFragment)
+    }
+
+    @Test
+    fun toolCallWithMultipleIndexes() {
+        val line = """data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"name":"open_app"}}]}}]}"""
+        assertEquals(1, parseSseLine(line)!!.toolCallDelta!!.index)
+    }
 }
