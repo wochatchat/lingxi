@@ -82,7 +82,7 @@ interface LlmStream {
 class LlmClient(
     private val client: OkHttpClient = defaultHttpClient(),
 ) : LlmStream {
-    fun streamChat(
+    override fun streamChat(
         apiKey: String,
         baseUrl: String,
         model: String,

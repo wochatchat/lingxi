@@ -58,7 +58,8 @@ class SystemTtsEngine @javax.inject.Inject constructor(
 
     /** 一句播完/失败：队列清空时放行 [idleSignal] */
     private fun settle() {
-        if (pending.decrementAndGet() <= 0) {
+        pending -= 1
+        if (pending <= 0) {
             val s = idleSignal
             if (!s.isCompleted) s.complete(Unit)
         }
