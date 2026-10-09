@@ -58,7 +58,7 @@ class IntentRouterTest {
     @Test
     fun `时间提取 - 冒号与点分格式`() {
         assertEquals(7 to 30, IntentRouter.extractAlarmTime("7:30 闹钟"))
-        assertEquals(23 to 15, IntentRouter.extractAlarmTime("23点30分"))
+        assertEquals(23 to 30, IntentRouter.extractAlarmTime("23点30分"))
         assertEquals(7 to 0, IntentRouter.extractAlarmTime("7点"))
     }
 

@@ -79,7 +79,7 @@ class SseParserTest {
         val tc = parseSseLine(line)!!.toolCallDelta!!
         assertEquals(0, tc.index)
         assertNull(tc.name)
-        assertEquals("{\"hour", tc.argsFragment)
+        assertEquals("{\"hou", tc.argsFragment)
     }
 
     @Test

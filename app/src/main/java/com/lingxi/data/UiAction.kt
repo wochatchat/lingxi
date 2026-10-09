@@ -33,10 +33,10 @@ data class UiAction(
     companion object {
         /** 从用户文本解析 voice choice："第 2 个"、"第二个"、"选第一个" → 0-based index */
         fun parseVoiceChoice(text: String): Int? {
-            val t = text.trim()
+            val t = text.trim().replace(" ", "").replace("\u3000", "") // 空格折叠（"第 2 个"）
             if (t.isEmpty() || t.length > 4) return null // 长句直接排除，防误命中（如"统一意见"）
-            val numWords = listOf("一", "二", "三", "四", "五", "六", "七", "八", "九", "十")
             // "第2个" / "第 2 个" / "第二个" / "第二" / "二"
+            val numWords = listOf("一", "二", "三", "四", "五", "六", "七", "八", "九", "十")
             val numPattern = Regex("""(?:第|选)?\s*([1-9]\d*|[\u4e00-\u9fa5])\s*(?:个|个?选项)?$""")
             numPattern.find(t)?.let { m ->
                 val raw = m.groupValues[1]
