@@ -63,12 +63,25 @@ fun parseSseLine(line: String): SseChunk? {
 }
 
 /**
+ * 流式对话抽象（便于单测注入 fake；LlmClient 为 OpenAI-compatible 唯一实现）。
+ */
+interface LlmStream {
+    fun streamChat(
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+        messages: List<ChatMessage>,
+        temperature: Double = 0.7,
+    ): Flow<LlmEvent>
+}
+
+/**
  * OpenAI-compatible 流式对话客户端。
  * 统一抽象：云厂商直连 / 自定义中转站 / Ollama 等本地网关走同一接口（F6/PRD §5）。
  */
 class LlmClient(
     private val client: OkHttpClient = defaultHttpClient(),
-) {
+) : LlmStream {
     fun streamChat(
         apiKey: String,
         baseUrl: String,

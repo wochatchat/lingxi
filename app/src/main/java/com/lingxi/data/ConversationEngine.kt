@@ -1,0 +1,126 @@
+package com.lingxi.data
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/** 对话回合状态（级联管线：ASR → LLM 流式 → 句切分 → TTS 队列播报） */
+sealed interface ConvState {
+    data object Idle : ConvState
+    data object Transcribing : ConvState
+    data class Thinking(val partial: String) : ConvState
+    data class Speaking(val partial: String) : ConvState
+    data class Failed(val user: String, val message: String) : ConvState
+}
+
+/** 一轮已完成的对话（UI 历史展示） */
+data class ConvTurn(val user: String, val reply: String)
+
+/**
+ * 对话引擎（PRD §12 级联模式骨架）：
+ * 输入文本（ASR 在 VM 层完成）→ LLM 流式 → 句切分 → TTS 队列播报。
+ * barge-in 打断、G 级门控、常听管线在 R3/R4 接入；本类保持纯级联语义。
+ */
+class ConversationEngine(
+    private val llm: LlmStream,
+    private val tts: TtsEngine,
+    private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
+) {
+    private val _state = MutableStateFlow<ConvState>(ConvState.Idle)
+    val state: StateFlow<ConvState> = _state.asStateFlow()
+
+    private val _history = MutableStateFlow<List<ConvTurn>>(emptyList())
+    val history: StateFlow<List<ConvTurn>> = _history.asStateFlow()
+
+    private val messages = ArrayDeque<ChatMessage>()
+
+    /**
+     * 跑一轮对话。挂起直到 LLM 流结束且 TTS 播完。
+     * 协程取消（barge-in 前身）时停播并上抛取消。
+     */
+    suspend fun runTurn(
+        userText: String,
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+    ) {
+        val user = userText.trim()
+        if (user.isEmpty()) return
+        val reply = StringBuilder()
+        try {
+            val request = buildList {
+                add(ChatMessage("system", systemPrompt))
+                addAll(messages.toList())
+                add(ChatMessage("user", user))
+            }
+            _state.value = ConvState.Thinking("")
+            val splitter = SentenceSplitter()
+            var anyEnqueued = false
+            llm.streamChat(apiKey, baseUrl, model, request).collect { ev ->
+                when (ev) {
+                    is LlmEvent.Delta -> {
+                        reply.append(ev.text)
+                        for (sentence in splitter.feed(ev.text)) {
+                            tts.enqueue(stripMarkdownForSpeech(sentence))
+                            anyEnqueued = true
+                        }
+                        _state.value = ConvState.Thinking(reply.toString())
+                    }
+                    is LlmEvent.Completed -> Unit
+                    is LlmEvent.Failed -> throw RuntimeException(ev.message)
+                }
+            }
+            for (sentence in splitter.flush()) {
+                tts.enqueue(stripMarkdownForSpeech(sentence))
+                anyEnqueued = true
+            }
+            _state.value = ConvState.Speaking(reply.toString())
+            if (anyEnqueued) tts.awaitIdle()
+            messages.addLast(ChatMessage("user", user))
+            messages.addLast(ChatMessage("assistant", reply.toString().trim()))
+            while (messages.size > MAX_HISTORY) messages.removeFirst()
+            _history.value = _history.value + pairOf(user, reply.toString().trim())
+            _state.value = ConvState.Idle
+        } catch (e: CancellationException) {
+            tts.stop()
+            throw e
+        } catch (e: Exception) {
+            tts.stop()
+            _state.value = ConvState.Failed(user, e.message ?: "对话失败")
+        }
+    }
+
+    /** 语音输入完整一轮：ASR → runTurn（ASR 失败不进对话） */
+    suspend fun runVoiceTurn(
+        audio: ByteArray,
+        sampleRate: Int,
+        asr: AsrEngine,
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+    ) {
+        _state.value = ConvState.Transcribing
+        val text = asr.transcribe(audio, sampleRate).getOrNull()
+        if (text.isNullOrBlank()) {
+            _state.value = ConvState.Failed("", "未能识别语音，请再试一次")
+            return
+        }
+        runTurn(text, apiKey, baseUrl, model)
+    }
+
+    fun cancel() {
+        tts.stop()
+        _state.value = ConvState.Idle
+    }
+
+    private fun pairOf(user: String, reply: String): ConvTurn = ConvTurn(user, reply)
+
+    companion object {
+        private const val MAX_HISTORY = 20
+        const val DEFAULT_SYSTEM_PROMPT =
+            "你是灵犀，一位简洁温暖、通过语音与人对话的中文助手。" +
+                "回答要口语化、简短、直接说重点，通常不超过三句话；" +
+                "避免 Markdown、列表和表情符号，因为你的话会被直接朗读出来。"
+    }
+}
