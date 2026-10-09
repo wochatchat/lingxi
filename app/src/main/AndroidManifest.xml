@@ -4,6 +4,8 @@
     <!-- 常听管线（R3 起使用）与网络 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- F15 首启引导：直接发起电池优化豁免申请 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- 呈现层（R3 耳语胶囊/对话卡片） -->
