@@ -100,7 +100,7 @@ class FloatingCapsuleService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        startInForeground()
+        refreshForegroundType()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val metrics = resources.displayMetrics
         screenWidth = metrics.widthPixels
