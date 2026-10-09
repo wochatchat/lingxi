@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.Settings as SystemSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -72,6 +73,7 @@ class GeneralSettingsViewModel @Inject constructor(
 @Composable
 fun GeneralSettingsScreen(
     onBack: () -> Unit,
+    onOpenMemory: () -> Unit = {},
     vm: GeneralSettingsViewModel = hiltViewModel(),
 ) {
     val ui by vm.state.collectAsState()
@@ -100,6 +102,11 @@ fun GeneralSettingsScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            EntryRow(
+                title = "记忆管理",
+                subtitle = "三层记忆：会话滑窗 / 每日摘要 / 长期画像；对话里说「记住…」即可沉淀，可在记忆管理页查看编辑",
+                onClick = onOpenMemory,
+            )
             SwitchRow(
                 title = "悬浮胶囊",
                 subtitle = "屏幕边缘常驻小胶囊，点击展开对话卡片；胶囊颜色跟随灵犀状态变化",
@@ -136,6 +143,31 @@ fun GeneralSettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+@Composable
+private fun EntryRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

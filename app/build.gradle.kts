@@ -117,6 +117,11 @@ dependencies {
     // F18 配置持久化
     implementation(libs.androidx.datastore.preferences)
 
+    // F7 三层记忆（R5）：Room 会话 / 每日摘要 / 长期画像
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
     // DI (Hilt) — PRD 技术栈
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

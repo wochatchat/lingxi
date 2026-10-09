@@ -1,5 +1,7 @@
 package com.lingxi.data
 
+import com.lingxi.data.memory.MemoryPrompts
+import com.lingxi.data.memory.MemoryStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -28,8 +30,8 @@ data class ConvTurn(val user: String, val reply: String)
 class ConversationEngine @javax.inject.Inject constructor(
     private val llm: LlmStream,
     private val tts: TtsEngine,
+    private val memory: com.lingxi.data.memory.MemoryStore,
 ) {
-    private val systemPrompt = DEFAULT_SYSTEM_PROMPT
     private val _state = MutableStateFlow<ConvState>(ConvState.Idle)
     val state: StateFlow<ConvState> = _state.asStateFlow()
 
@@ -40,6 +42,9 @@ class ConversationEngine @javax.inject.Inject constructor(
 
     /** 正在跑的回合协程：cancel 时连根取消，防止旧回合在打断后继续落账/改状态 */
     @Volatile private var currentJob: Job? = null
+
+    /** 会话滑窗是否已从 Room 恢复（进程生命周期内只恢复一次） */
+    @Volatile private var seeded = false
 
     /**
      * 跑一轮对话。挂起直到 LLM 流结束且 TTS 播完。
@@ -56,12 +61,13 @@ class ConversationEngine @javax.inject.Inject constructor(
         currentJob = currentCoroutineContext()[Job]
         val reply = StringBuilder()
         try {
+            seedFromMemory()
+            val systemPrompt = buildMemoryPrompt()
             val request = buildList {
                 add(ChatMessage("system", systemPrompt))
                 addAll(messages.toList())
                 add(ChatMessage("user", user))
             }
-            _state.value = ConvState.Thinking("")
             _state.value = ConvState.Thinking("")
             // 首句预读：12 字内遇停顿即切出，TTS 队列天然预读后续句（PRD「提前 2 句预读」基座）
             val splitter = SentenceSplitter(eagerFirstSplitChars = EAGER_FIRST_CHARS)
@@ -86,10 +92,13 @@ class ConversationEngine @javax.inject.Inject constructor(
             }
             _state.value = ConvState.Speaking(reply.toString())
             if (anyEnqueued) tts.awaitIdle()
+            val replyText = reply.toString().trim()
             messages.addLast(ChatMessage("user", user))
-            messages.addLast(ChatMessage("assistant", reply.toString().trim()))
-            while (messages.size > MAX_HISTORY) messages.removeFirst()
-            _history.value = _history.value + pairOf(user, reply.toString().trim())
+            messages.addLast(ChatMessage("assistant", replyText))
+            while (messages.size > MAX_HISTORY * 2) messages.removeFirst()
+            _history.value = _history.value + ConvTurn(user, replyText)
+            // F7 三层记忆：落库 + 异步画像提取 / 日滚摘要（失败不影响对话）
+            runCatching { memory.onTurnCompleted(user, replyText) }
             _state.value = ConvState.Idle
         } catch (e: CancellationException) {
             tts.stop()
@@ -126,11 +135,32 @@ class ConversationEngine @javax.inject.Inject constructor(
         _state.value = ConvState.Idle
     }
 
-    private fun pairOf(user: String, reply: String): ConvTurn = ConvTurn(user, reply)
+    /** 首轮对话时从 Room 恢复历史滑窗（重启后仍记得最近 N 轮） */
+    private suspend fun seedFromMemory() {
+        if (seeded) return
+        seeded = true
+        val stored = runCatching { memory.loadRecentTurns(MAX_HISTORY) }.getOrDefault(emptyList())
+        if (stored.isEmpty()) return
+        for (t in stored) {
+            messages.addLast(ChatMessage("user", t.user))
+            messages.addLast(ChatMessage("assistant", t.reply))
+        }
+        _history.value = stored.map { ConvTurn(it.user, it.reply) }
+    }
+
+    /** system prompt = 基底人格 + 长期画像 + 近期每日摘要（每轮重建，语音编辑即时生效） */
+    private suspend fun buildMemoryPrompt(): String {
+        val profile = runCatching { memory.profileLines() }.getOrDefault(emptyList())
+        val summaries = runCatching { memory.recentDailySummaries(RECENT_SUMMARIES) }
+            .getOrDefault(emptyList())
+            .map { it.date to it.summary }
+        return MemoryPrompts.buildSystemPrompt(DEFAULT_SYSTEM_PROMPT, profile, summaries)
+    }
 
     companion object {
         private const val MAX_HISTORY = 20
         private const val EAGER_FIRST_CHARS = 12
+        private const val RECENT_SUMMARIES = 5
         const val DEFAULT_SYSTEM_PROMPT =
             "你是灵犀，一位简洁温暖、通过语音与人对话的中文助手。" +
                 "回答要口语化、简短、直接说重点，通常不超过三句话；" +
