@@ -87,7 +87,7 @@ class LlmClient(
         baseUrl: String,
         model: String,
         messages: List<ChatMessage>,
-        temperature: Double = 0.7,
+        temperature: Double,
     ): Flow<LlmEvent> = callbackFlow {
         val body = buildJsonObject {
             put("model", model)
