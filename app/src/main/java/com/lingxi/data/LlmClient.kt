@@ -73,9 +73,9 @@ fun parseSseLine(line: String): SseChunk? {
         val deltaText = delta?.get("content")?.jsonPrimitive?.contentOrNull
         val finish = (first?.get("finish_reason") as? JsonPrimitive)?.contentOrNull
         // tool_calls 分片：delta.tool_calls = [{index, function:{name?, arguments?}}]
-        val toolDelta = (delta?.get("tool_calls") as? JsonArray)
-            ?.firstOrNull() as? JsonObject
-            ?.let { tc ->
+        val tcArray = delta?.get("tool_calls") as? JsonArray
+        val firstTc = tcArray?.firstOrNull() as? JsonObject
+        val toolDelta = firstTc?.let { tc ->
                 val idx = (tc["index"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
                 val fn = tc["function"] as? JsonObject
                 ToolCallDelta(
