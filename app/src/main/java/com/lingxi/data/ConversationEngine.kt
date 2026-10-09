@@ -61,7 +61,9 @@ class ConversationEngine @javax.inject.Inject constructor(
                 add(ChatMessage("user", user))
             }
             _state.value = ConvState.Thinking("")
-            val splitter = SentenceSplitter()
+            _state.value = ConvState.Thinking("")
+            // 首句预读：12 字内遇停顿即切出，TTS 队列天然预读后续句（PRD「提前 2 句预读」基座）
+            val splitter = SentenceSplitter(eagerFirstSplitChars = EAGER_FIRST_CHARS)
             var anyEnqueued = false
             llm.streamChat(apiKey, baseUrl, model, request).collect { ev ->
                 when (ev) {
@@ -127,6 +129,7 @@ class ConversationEngine @javax.inject.Inject constructor(
 
     companion object {
         private const val MAX_HISTORY = 20
+        private const val EAGER_FIRST_CHARS = 12
         const val DEFAULT_SYSTEM_PROMPT =
             "你是灵犀，一位简洁温暖、通过语音与人对话的中文助手。" +
                 "回答要口语化、简短、直接说重点，通常不超过三句话；" +

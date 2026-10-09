@@ -9,8 +9,13 @@ package com.lingxi.data
  * - 缓冲超过 [forceSplitChars] 仍无标点 → 强制切出（防 LLM 不吐标点导致永不播报）
  * - [flush] 吐出残余（turn 结束时调用）
  */
-class SentenceSplitter(private val forceSplitChars: Int = 60) {
+class SentenceSplitter(
+    private val forceSplitChars: Int = 60,
+    /** >0 时：首句未切出前，缓冲达该长度且遇停顿标点（，、：）即提前切出，压低 TTS 首声延迟（R4 预读） */
+    private val eagerFirstSplitChars: Int = 0,
+) {
     private val buf = StringBuilder()
+    private var firstDone = false
 
     /** 喂入一段增量，返回本次切出的完整句（可能 0 到多个） */
     fun feed(delta: String): List<String> {
@@ -18,7 +23,14 @@ class SentenceSplitter(private val forceSplitChars: Int = 60) {
         val out = mutableListOf<String>()
         var last = 0
         for (i in buf.indices) {
-            if (buf[i] in SENTENCE_ENDS) { out.add(buf.substring(last, i + 1)); last = i + 1 }
+            val cut = when {
+                buf[i] in SENTENCE_ENDS -> i + 1
+                // 首句预读：尚未切出任何句子时，遇停顿标点且已有足够长度即提前切
+                !firstDone && eagerFirstSplitChars > 0 &&
+                    buf.length >= eagerFirstSplitChars && buf[i] in PAUSE_ENDS -> i + 1
+                else -> 0
+            }
+            if (cut > 0) { out.add(buf.substring(last, cut)); last = cut; firstDone = true }
         }
         buf.delete(0, last)
         // 强制切：无标点但已过长，定长切出，余量继续累积
@@ -33,11 +45,13 @@ class SentenceSplitter(private val forceSplitChars: Int = 60) {
     fun flush(): List<String> {
         val rest = buf.toString()
         buf.clear()
+        firstDone = true
         return if (rest.isBlank()) emptyList() else listOf(rest)
     }
 
     companion object {
         val SENTENCE_ENDS = charArrayOf('。', '！', '？', '!', '?', '；', ';', '…', '\n')
+        val PAUSE_ENDS = charArrayOf('，', ',', '、', '：', ':', '——')
     }
 }
 
