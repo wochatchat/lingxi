@@ -29,8 +29,8 @@ class CapsuleMathTest {
     fun `exceededSlop 阈值判定`() {
         assertTrue(CapsuleMath.exceededSlop(11f, 0f, 8f))
         assertTrue(CapsuleMath.exceededSlop(0f, -9f, 8f))
-        assertTrue(CapsuleMath.exceededSlop(7f, 7f, 8f))
-        assertFalse(CapsuleMath.exceededSlop(6f, -6f, 8f))
+        // 逐轴判定：对角 7,7 单轴未超 slop，不判拖动
+        assertFalse(CapsuleMath.exceededSlop(7f, 7f, 8f))
         assertFalse(CapsuleMath.exceededSlop(0f, 0f, 8f))
     }
 }
