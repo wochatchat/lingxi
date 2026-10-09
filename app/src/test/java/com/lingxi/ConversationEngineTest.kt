@@ -256,7 +256,7 @@ class ConversationEngineTest {
         )
         val engine = ConversationEngine(FakeLlm(emptyList()), tts, FakeMemoryStore(), ex)
         val job = launch { engine.runTurn("打开微信", "k", "u", "m") }
-        runCurrent()
+        testScheduler.runCurrent()
         assertEquals(UiAction.UiType.ChoiceSheet, engine.pendingUi.value?.type)
         engine.onUiChoice(0)
         job.join()
@@ -277,7 +277,7 @@ class ConversationEngineTest {
         )
         val engine = ConversationEngine(FakeLlm(emptyList()), FakeTts(), FakeMemoryStore(), ex)
         val job = launch { engine.runTurn("打开微信", "k", "u", "m") }
-        runCurrent()
+        testScheduler.runCurrent()
         assertEquals(UiAction.UiType.ChoiceSheet, engine.pendingUi.value?.type)
         // 语音通道：说"第2个"（engine.runTurn 分流）
         engine.runTurn("第2个", "k", "u", "m")
