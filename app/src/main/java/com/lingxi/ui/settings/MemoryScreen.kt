@@ -60,6 +60,13 @@ class MemoryViewModel @Inject constructor(
     ) { profile, summaries -> MemoryUiState(profile, summaries) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MemoryUiState())
 
+    fun setProfileEnabled(id: Long, enabled: Boolean) =
+        viewModelScope.launch { memory.setProfileEnabled(id, enabled) }
+
+    fun deleteProfile(id: Long) = viewModelScope.launch { memory.deleteProfile(id) }
+
+    fun clearProfile() = viewModelScope.launch { memory.clearProfile() }
+
     fun clearTurns() = viewModelScope.launch { memory.clearTurns() }
 }
 
