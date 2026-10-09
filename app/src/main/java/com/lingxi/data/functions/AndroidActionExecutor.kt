@@ -2,12 +2,15 @@ package com.lingxi.data.functions
 
 import android.app.SearchManager
 import android.content.Context
-import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.AlarmClock
-import android.provider.Settings
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -144,8 +147,7 @@ class AndroidActionExecutor @Inject constructor(
         return runCatching {
             val trimmed = json.trim()
             if (!trimmed.startsWith("{")) return emptyMap()
-            val obj = kotlinx.serialization.json.Json.parseToJsonElement(trimmed)
-                .jsonObject
+            val obj = Json.parseToJsonElement(trimmed).jsonObject
             obj.entries.associate { it.key to (it.value.jsonPrimitive.contentOrNull ?: "") }
         }.getOrDefault(emptyMap())
     }

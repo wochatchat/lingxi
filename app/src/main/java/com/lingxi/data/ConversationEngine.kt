@@ -1,6 +1,7 @@
 package com.lingxi.data
 
 import com.lingxi.data.functions.ActionExecutor
+import com.lingxi.data.functions.ActionResult
 import com.lingxi.data.functions.ToolDefs
 import com.lingxi.data.memory.MemoryPrompts
 import com.lingxi.data.memory.MemoryStore
@@ -211,32 +212,6 @@ class ConversationEngine @javax.inject.Inject constructor(
         if (ev.name == "ui_action") {
             return showUiAction(ev.argsJson)
         }
-        val result = runCatching { executor.execute(ev.name, ev.argsJson) }
-            .getOrElse { ActionResult.error(it.message ?: "执行失败") }
-        // open_app 多候选 → ChoiceSheet，等用户说"第 N 个"
-        if (result.candidates.isNotEmpty()) {
-            val sheet = UiAction(
-                type = UiAction.UiType.ChoiceSheet,
-                title = "找到多个匹配的应用",
-                options = result.candidates,
-            )
-            tts.enqueue(stripMarkdownForSpeech(UiAction.voicePrompt(sheet)))
-            val chosen = askUser(pending = sheet) ?: return "那先不打开了，需要再说一声" to null
-            val idx = chosen.toIntOrNull()
-            if (idx == null || idx < 0 || idx >= result.candidates.size) {
-                return "好的，先不打开了" to UiAction(
-                    type = UiAction.UiType.ChoiceSheet, title = "打开应用",
-                    options = result.candidates, resolvedIndex = -1, resolvedText = "已取消",
-                )
-            }
-            val name = result.candidates[idx]
-            val launch = executor.execute("open_app", """{"app_name":"$name"}""")
-            tts.enqueue(stripMarkdownForSpeech(launch.spoken))
-            return "" to UiAction(
-                type = UiAction.UiType.ChoiceSheet, title = "打开应用",
-                options = result.candidates, resolvedIndex = idx, resolvedText = name,
-            )
-        }
         // send_sms 走 ConfirmGate（安全边界：短信必须过确认门）
         if (ev.name == "send_sms") {
             val args = runCatching {
@@ -252,17 +227,41 @@ class ConversationEngine @javax.inject.Inject constructor(
             tts.enqueue(stripMarkdownForSpeech(UiAction.confirmVoicePrompt(gate)))
             val answer = askUser(gate) ?: return "好的，先不发短信" to gate.copy(resolvedText = "已取消")
             if (answer == "0") return "好的，不发了" to gate.copy(resolvedText = "已取消")
-            val result = runCatching { executor.execute("send_sms", ev.argsJson) }
+            val smsResult = runCatching { executor.execute("send_sms", ev.argsJson) }
                 .getOrElse { ActionResult.error(it.message ?: "执行失败") }
-            tts.enqueue(stripMarkdownForSpeech(result.spoken))
+            tts.enqueue(stripMarkdownForSpeech(smsResult.spoken))
             return "" to gate.copy(resolvedText = "已发送（请在短信应用点发送）")
         }
-        // 其余工具直接执行
-        val result = runCatching { executor.execute(ev.name, ev.argsJson) }
+        val first = runCatching { executor.execute(ev.name, ev.argsJson) }
             .getOrElse { ActionResult.error(it.message ?: "执行失败") }
-        if (result.spoken.isNotBlank()) tts.enqueue(stripMarkdownForSpeech(result.spoken))
-        val card = result.cardTitle?.let {
-            UiAction(type = UiAction.UiType.InfoCard, title = it, body = result.cardBody)
+        // open_app 多候选 → ChoiceSheet，等用户说"第 N 个"
+        if (first.candidates.isNotEmpty()) {
+            val sheet = UiAction(
+                type = UiAction.UiType.ChoiceSheet,
+                title = "找到多个匹配的应用",
+                options = first.candidates,
+            )
+            tts.enqueue(stripMarkdownForSpeech(UiAction.voicePrompt(sheet)))
+            val chosen = askUser(pending = sheet) ?: return "那先不打开了，需要再说一声" to null
+            val idx = chosen.toIntOrNull()
+            if (idx == null || idx < 0 || idx >= first.candidates.size) {
+                return "好的，先不打开了" to UiAction(
+                    type = UiAction.UiType.ChoiceSheet, title = "打开应用",
+                    options = first.candidates, resolvedIndex = -1, resolvedText = "已取消",
+                )
+            }
+            val name = first.candidates[idx]
+            val launch = executor.execute("open_app", """{"app_name":"$name"}""")
+            tts.enqueue(stripMarkdownForSpeech(launch.spoken))
+            return "" to UiAction(
+                type = UiAction.UiType.ChoiceSheet, title = "打开应用",
+                options = first.candidates, resolvedIndex = idx, resolvedText = name,
+            )
+        }
+        // 其余工具直接执行（单结果）
+        if (first.spoken.isNotBlank()) tts.enqueue(stripMarkdownForSpeech(first.spoken))
+        val card = first.cardTitle?.let {
+            UiAction(type = UiAction.UiType.InfoCard, title = it, body = first.cardBody)
         }
         return "" to card
     }
