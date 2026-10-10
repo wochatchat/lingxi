@@ -76,7 +76,7 @@ class LingXiAccessibilityService : AccessibilityService() {
 
         fun readScreenText(): String? = instance?.readScreenText()
 
-        fun clickText(target: String): Boolean = instance?.clickText(target) ?: false
+        fun clickText(target: String): Boolean = instance?.clickByText(target) ?: false
 
         private const val MAX_TEXT = 2000
         private const val MAX_NODES = 500

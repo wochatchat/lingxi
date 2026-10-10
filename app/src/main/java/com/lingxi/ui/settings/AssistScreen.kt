@@ -165,7 +165,7 @@ fun AssistScreen(
             }) { Text(if (a11yOn) "系统无障碍设置（可关闭）" else "去系统设置开启无障碍服务") }
 
             Text("操作审计", style = MaterialTheme.typography.titleMedium)
-            if (ui.audit.isEmpty()) {
+            if (ui.audits.isEmpty()) {
                 Text(
                     "暂无操作记录",
                     style = MaterialTheme.typography.bodySmall,
@@ -174,7 +174,7 @@ fun AssistScreen(
             } else {
                 TextButton(onClick = vm::clearAudit) { Text("清空审计日志") }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(ui.audit, key = { it.ts.toString() + it.action + it.detail }) { e ->
+                    items(ui.audits, key = { it.ts.toString() + it.action + it.detail }) { e ->
                         Column {
                             Text(
                                 "${formatTs(e.ts)} · ${e.action} · ${e.detail} · ${if (e.success) "成功" else "失败"}",

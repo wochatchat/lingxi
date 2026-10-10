@@ -40,6 +40,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -134,11 +135,12 @@ fun PowerPanelScreen(
             // 电量与 24h 统计
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val level = ui.battery?.level
+                    val battery = ui.battery
+                    val level = battery?.level
                     Text(
                         text = when {
                             level == null -> "电量：--（暂无采样）"
-                            ui.battery.charging == true -> "🔋 $level%（充电中）"
+                            battery.charging == true -> "🔋 $level%（充电中）"
                             else -> "🔋 $level%"
                         },
                         style = MaterialTheme.typography.titleLarge,
