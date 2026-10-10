@@ -56,7 +56,7 @@ class LingXiAccessibilityService : AccessibilityService() {
             if (target.isNotBlank() && label.contains(target, ignoreCase = true)) {
                 var cur: AccessibilityNodeInfo? = node
                 while (cur != null) {
-                    if (cur.isClickable) return cur.performAction(ACTION_CLICK)
+                    if (cur.isClickable) return cur.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     cur = cur.parent
                 }
             }
