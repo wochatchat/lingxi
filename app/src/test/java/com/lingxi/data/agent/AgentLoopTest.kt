@@ -112,17 +112,6 @@ class AgentLoopTest {
         // 最后一次调用（forceSummary）不带工具
         assertTrue(llm.lastTools == null || llm.lastTools?.isEmpty() == true)
     }
-        val tools = listOf(
-            ToolSpec("check_task", "查任务", """{"type":"object","properties":{},"required":[]}"""),
-        )
-        val llm = FakeLlm(toolOnlySequence)
-        val loop = AgentLoop(llm) { _, _ -> AgentToolResult(true, "tool ok") }
-        val outcome = loop.run(cfg(tools).copy(maxSteps = 2))
-        assertEquals(3, outcome.stepsUsed) // 2 tool steps + 1 force summary
-        assertEquals("例行检查，一切正常", outcome.summary)
-        // 最后一次调用应无工具（强制总结）
-        assertTrue(llm.lastTools == null)
-    }
 
     @Test
     fun `LLM 失败 → error 非 null`() = runTest {
