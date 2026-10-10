@@ -7,10 +7,11 @@ import javax.inject.Singleton
 
 /**
  * 检查器结果（R9）：Progress 有新进展（任务继续跑），Final 已完结（任务标 DONE）。
+ * R10：Final 可携带追问提示（followup），worker 据此追加追问动作（如追问取件码）。
  */
 sealed interface TaskUpdate {
     data class Progress(val text: String) : TaskUpdate
-    data class Final(val text: String) : TaskUpdate
+    data class Final(val text: String, val followup: String = Followup.NONE) : TaskUpdate
 }
 
 /**
@@ -28,17 +29,19 @@ class DefaultTaskChecker @Inject constructor() : TaskChecker {
 }
 
 /**
- * 检查器路由器（R9）：EXPRESS → 快递100；GENERIC → 默认占位。
- * 快递 customer/key 未配置时返回 null（任务继续打卡巡查，不影响链路）。
+ * 检查器路由器（R9/R10）：EXPRESS → 快递100；FLIGHT → AviationStack；GENERIC → 默认占位。
+ * 凭据未配置时返回 null（任务继续打卡巡查，不影响链路）。
  */
 @Singleton
 class CheckerRouter @Inject constructor(
     private val settings: SettingsRepository,
     private val kuaidi: Kuaidi100Client,
+    private val flight: FlightClient,
 ) : TaskChecker {
 
     override suspend fun check(task: DelegationTaskEntity): TaskUpdate? = when (task.taskType) {
         TaskType.EXPRESS -> checkExpress(task)
+        TaskType.FLIGHT -> checkFlight(task)
         else -> null
     }
 
@@ -53,6 +56,23 @@ class CheckerRouter @Inject constructor(
         val summary = ExpressTracking.summarize(body, trackingNo) ?: return null
         // 与上次结果相同 → 不算新进展（防重复打扰）
         if (summary == task.lastResult) return null
-        return if (ExpressTracking.isFinal(body)) TaskUpdate.Final(summary) else TaskUpdate.Progress(summary)
+        // R10：签收/到驿站 → 完结并追问取件码
+        val followup =
+            if (ExpressTracking.isFinal(body) && ExpressTracking.needsPickupFollowup(body)) Followup.PICKUP_CODE
+            else Followup.NONE
+        return if (ExpressTracking.isFinal(body)) TaskUpdate.Final(summary, followup)
+        else TaskUpdate.Progress(summary)
+    }
+
+    /** R10 航班跟踪：AviationStack，access_key 未配置回落打卡 */
+    private suspend fun checkFlight(task: DelegationTaskEntity): TaskUpdate? {
+        val flightNo = TaskParams.flightNo(task.paramsJson)
+            .ifBlank { FlightTracking.extractFlightNo(task.title) ?: return null }
+        val key = settings.flightApiKey.first()
+        if (key.isBlank()) return null
+        val body = flight.query(key, flightNo) ?: return null
+        val summary = FlightTracking.summarize(body, flightNo) ?: return null
+        if (summary == task.lastResult) return null
+        return if (FlightTracking.isFinal(body)) TaskUpdate.Final(summary) else TaskUpdate.Progress(summary)
     }
 }

@@ -1,5 +1,7 @@
 package com.lingxi.data.functions
 
+import com.lingxi.data.UiAction
+
 /** 工具执行结果 */
 data class ActionResult(
     val success: Boolean,
@@ -13,10 +15,19 @@ data class ActionResult(
     val candidates: List<String> = emptyList(),
     /** 执行失败的错误说明（给用户看） */
     val errorMessage: String? = null,
+    /** R10：创建巡查任务后弹出的参数确认面板（引擎呈现并回写参数） */
+    val paramPanel: UiAction? = null,
+    /** R10：paramPanel 对应的任务 id（引擎回写 update_interval 用） */
+    val paramTaskId: Long = 0L,
 ) {
     companion object {
-        fun ok(spoken: String, cardTitle: String? = null, cardBody: String? = null) =
-            ActionResult(true, spoken, cardTitle, cardBody)
+        fun ok(
+            spoken: String,
+            cardTitle: String? = null,
+            cardBody: String? = null,
+            paramPanel: UiAction? = null,
+            paramTaskId: Long = 0L,
+        ) = ActionResult(true, spoken, cardTitle, cardBody, paramPanel = paramPanel, paramTaskId = paramTaskId)
 
         fun candidates(list: List<String>) =
             ActionResult(false, "找到多个应用，请说第几个", candidates = list)

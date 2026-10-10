@@ -159,4 +159,14 @@ class SettingsRepository @javax.inject.Inject constructor(
     suspend fun setExpressKey(value: String) {
         context.settingsDataStore.edit { it[expressKeyKey] = value.trim() }
     }
+
+    // R10 F13 航班查询（AviationStack access_key；未配置 → 航班委托回落占位巡查）
+    private val flightApiKeyKey = stringPreferencesKey("flight_api_key")
+
+    val flightApiKey: Flow<String> =
+        context.settingsDataStore.data.map { it[flightApiKeyKey] ?: "" }
+
+    suspend fun setFlightApiKey(value: String) {
+        context.settingsDataStore.edit { it[flightApiKeyKey] = value.trim() }
+    }
 }

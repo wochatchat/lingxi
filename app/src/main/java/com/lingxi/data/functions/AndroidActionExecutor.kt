@@ -108,20 +108,34 @@ class AndroidActionExecutor @Inject constructor(
             }
             is com.lingxi.data.delegation.DelegationArgs.Command.CreatePoll -> {
                 val isExpress = command.trackingNo.isNotBlank()
+                val isFlight = !isExpress && command.flightNo.isNotBlank()
+                val (taskType, paramsJson, typeLine) = when {
+                    isExpress -> Triple(
+                        com.lingxi.data.delegation.TaskType.EXPRESS,
+                        com.lingxi.data.delegation.TaskParams.encodeExpress(command.trackingNo, command.company),
+                        "\n快递单号：${command.trackingNo}",
+                    )
+                    isFlight -> Triple(
+                        com.lingxi.data.delegation.TaskType.FLIGHT,
+                        com.lingxi.data.delegation.TaskParams.encodeFlight(command.flightNo),
+                        "\n航班号：${command.flightNo}",
+                    )
+                    else -> Triple(com.lingxi.data.delegation.TaskType.GENERIC, "{}", "")
+                }
                 val task = delegation.createPoll(
                     command.title,
                     command.intervalMinutes,
-                    taskType = if (isExpress) com.lingxi.data.delegation.TaskType.EXPRESS
-                    else com.lingxi.data.delegation.TaskType.GENERIC,
-                    paramsJson = if (isExpress) {
-                        com.lingxi.data.delegation.TaskParams.encodeExpress(command.trackingNo, command.company)
-                    } else "{}",
+                    taskType = taskType,
+                    paramsJson = paramsJson,
                 )
-                val typeLine = if (isExpress) "\n快递单号：${command.trackingNo}" else ""
+                // R10：创建巡查任务后自动弹参数确认面板（改间隔 → update_interval 落库）
+                val panel = taskParamPanel(task)
                 ActionResult.ok(
                     "收到，我会每${humanInterval(task.intervalMinutes)}盯一次「${command.title}」，有消息就告诉你",
                     cardTitle = "委托任务已创建",
                     cardBody = "${task.title}\n巡查间隔：每${humanInterval(task.intervalMinutes)}$typeLine",
+                    paramPanel = panel,
+                    paramTaskId = task.id,
                 )
             }
             is com.lingxi.data.delegation.DelegationArgs.Command.List -> {
@@ -150,7 +164,43 @@ class AndroidActionExecutor @Inject constructor(
                 mutate(command.id, command.title, "暂停") { delegation.pause(it) }
             is com.lingxi.data.delegation.DelegationArgs.Command.Resume ->
                 mutate(command.id, command.title, "恢复") { delegation.resume(it) }
+            // R10：ParamPanel 直连回写（引擎把面板应答转成此命令）
+            is com.lingxi.data.delegation.DelegationArgs.Command.UpdateInterval -> {
+                val task = command.id?.let { delegation.byId(it) }
+                    ?: delegation.findActiveByTitle(command.title)
+                    ?: return ActionResult.error("找不到任务：${command.title.ifBlank { "#${command.id}" }}")
+                val ok = delegation.updateInterval(task.id, command.intervalMinutes)
+                if (ok) {
+                    ActionResult.ok(
+                        "已把「${task.title}」改成每${humanInterval(command.intervalMinutes)}查一次",
+                        cardTitle = "巡查间隔已调整",
+                        cardBody = "${task.title} · 每${humanInterval(command.intervalMinutes)}",
+                    )
+                } else {
+                    ActionResult.error("改间隔失败")
+                }
+            }
         }
+    }
+
+    /** R10：巡查任务参数确认面板（间隔可改，确认后引擎回写 update_interval） */
+    private fun taskParamPanel(
+        task: com.lingxi.data.delegation.DelegationTaskEntity,
+    ): com.lingxi.data.UiAction {
+        return com.lingxi.data.UiAction(
+            type = com.lingxi.data.UiAction.UiType.ParamPanel,
+            title = "确认巡查参数",
+            body = "任务「${task.title}」，可调整巡查间隔（最小 15 分钟）",
+            confirmLabel = "按这个来",
+            fields = listOf(
+                com.lingxi.data.UiAction.ParamField(
+                    key = "interval_minutes",
+                    label = "巡查间隔（分钟）",
+                    value = task.intervalMinutes.toString(),
+                    hint = "15-1440，如 60 = 每小时",
+                ),
+            ),
+        )
     }
 
     private suspend fun mutate(

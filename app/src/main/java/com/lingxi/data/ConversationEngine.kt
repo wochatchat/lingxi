@@ -350,11 +350,45 @@ class ConversationEngine @javax.inject.Inject constructor(
         }
         // 其余工具直接执行（单结果）
         if (first.spoken.isNotBlank()) tts.enqueue(stripMarkdownForSpeech(first.spoken))
+        // R10 ParamPanel 直连：创建巡查任务后自动弹参数确认，改间隔落库（面板替代 InfoCard 挂账）
+        first.paramPanel?.let {
+            return "" to presentTaskParamPanel(it, first.paramTaskId)
+        }
         val card = first.cardTitle?.let {
             UiAction(type = UiAction.UiType.InfoCard, title = it, body = first.cardBody)
         }
         return "" to card
     }
+
+    /** R10 ParamPanel 直连：呈现面板并按应答回写巡查间隔（manage_task 创建直连） */
+    private suspend fun presentTaskParamPanel(panel: UiAction, taskId: Long): UiAction {
+        tts.enqueue(stripMarkdownForSpeech("任务建好了，要调整巡查间隔吗？点卡片修改，或说${panel.confirmLabel}。"))
+        val answer = askUser(panel) ?: return panel.copy(resolvedText = "超时，按默认间隔执行")
+        val answers = parseParamAnswers(answer)
+        return when {
+            answer == "0" || answer == CANCELLED -> panel.copy(resolvedText = "保持默认参数")
+            answer == "1" || answer == CONFIRMED ->
+                panel.copy(resolvedText = UiAction.paramSummary(panel, emptyMap()))
+            else -> {
+                val newInterval = answers["interval_minutes"]?.toIntOrNull()?.coerceAtLeast(15)
+                if (newInterval != null) {
+                    executor.execute(
+                        "manage_task",
+                        """{"action":"update_interval","id":"$taskId","interval_minutes":"$newInterval"}""",
+                    )
+                }
+                panel.copy(resolvedText = UiAction.paramSummary(panel, answers))
+            }
+        }
+    }
+
+    /** ParamPanel 应答 JSON → Map（非 JSON 应答返回空表） */
+    private fun parseParamAnswers(answer: String): Map<String, String> = runCatching {
+        val obj = Json.parseToJsonElement(answer).jsonObject
+        obj.mapNotNull { (k, v) ->
+            (v as? JsonPrimitive)?.contentOrNull?.let { k to it }
+        }.toMap()
+    }.getOrDefault(emptyMap())
 
     /** 处理 LLM 下发的 ui_action 工具调用：呈现原语并等用户应答 */
     private suspend fun showUiAction(argsJson: String): Pair<String, UiAction?> {
@@ -388,12 +422,7 @@ class ConversationEngine @javax.inject.Inject constructor(
                     )
                     else -> {
                         // 表单提交的 JSON：{"key":"value"} → 摘要进卡片
-                        val answers = runCatching {
-                            val obj = Json.parseToJsonElement(answer).jsonObject
-                            obj.mapNotNull { (k, v) ->
-                                (v as? JsonPrimitive)?.contentOrNull?.let { k to it }
-                            }.toMap()
-                        }.getOrDefault(emptyMap())
+                        val answers = parseParamAnswers(answer)
                         "好的，参数已确认" to action.copy(
                             resolvedText = UiAction.paramSummary(action, answers).ifBlank { "参数已确认" },
                         )

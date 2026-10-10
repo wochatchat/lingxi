@@ -111,4 +111,62 @@ class DelegationArgsTest {
         val r = parse("action" to "explode", "title" to "x")
         assertTrue(r is DelegationArgs.Result.Error)
     }
+
+    // ---- R10 F13：航班参数 ----
+
+    @Test
+    fun `poll 显式 flight_no 走航班`() {
+        val r = parse(
+            "action" to "create", "kind" to "poll",
+            "title" to "盯航班", "interval_minutes" to "60",
+            "flight_no" to "CA1234",
+        )
+        val cmd = (r as DelegationArgs.Result.Ok).command as DelegationArgs.Command.CreatePoll
+        assertEquals("CA1234", cmd.flightNo)
+    }
+
+    @Test
+    fun `标题里的航班号自动提取`() {
+        val r = parse("action" to "create", "kind" to "poll", "title" to "盯 MU5678 落地", "interval_minutes" to "30")
+        val cmd = (r as DelegationArgs.Result.Ok).command as DelegationArgs.Command.CreatePoll
+        assertEquals("MU5678", cmd.flightNo)
+    }
+
+    @Test
+    fun `快递单号优先于航班号`() {
+        val r = parse(
+            "action" to "create", "kind" to "poll",
+            "title" to "盯 SF1234567890", "interval_minutes" to "60",
+        )
+        val cmd = (r as DelegationArgs.Result.Ok).command as DelegationArgs.Command.CreatePoll
+        assertEquals("SF1234567890", cmd.trackingNo)
+        assertTrue(cmd.flightNo.isBlank())
+    }
+
+    // ---- R10：update_interval（ParamPanel 直连回写） ----
+
+    @Test
+    fun `update_interval 按 id`() {
+        val r = parse("action" to "update_interval", "id" to "3", "interval_minutes" to "45")
+        val cmd = (r as DelegationArgs.Result.Ok).command as DelegationArgs.Command.UpdateInterval
+        assertEquals(3L, cmd.id)
+        assertEquals(45, cmd.intervalMinutes)
+    }
+
+    @Test
+    fun `update_interval 按 title`() {
+        val r = parse("action" to "update_interval", "title" to "盯快递", "interval_minutes" to "120")
+        val cmd = (r as DelegationArgs.Result.Ok).command as DelegationArgs.Command.UpdateInterval
+        assertEquals("盯快递", cmd.title)
+        assertEquals(120, cmd.intervalMinutes)
+    }
+
+    @Test
+    fun `update_interval 缺间隔报错`() {
+        assertTrue(parse("action" to "update_interval", "id" to "3") is DelegationArgs.Result.Error)
+        assertTrue(parse("action" to "update_interval", "id" to "3", "interval_minutes" to "5")
+            is DelegationArgs.Result.Error)
+        assertTrue(parse("action" to "update_interval", "interval_minutes" to "60")
+            is DelegationArgs.Result.Error)
+    }
 }

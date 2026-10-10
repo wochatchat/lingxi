@@ -163,9 +163,9 @@ private fun ConvHistory(history: List<ConvTurn>, modifier: Modifier = Modifier) 
     }
 }
 
-/** 历史轮次上挂靠的 Stream-UI 卡片（状态即快照，可回放） */
+/** 历史轮次上挂靠的 Stream-UI 卡片（状态即快照，可回放；internal 供 @Preview 沙盒复用） */
 @Composable
-private fun TurnUiCards(actions: List<UiAction>) {
+internal fun TurnUiCards(actions: List<UiAction>) {
     for (action in actions) {
         when (action.type) {
             UiAction.UiType.ChoiceSheet -> Card(
@@ -301,7 +301,7 @@ private fun TurnUiCards(actions: List<UiAction>) {
  * 语音通道等价：说"第 N 个"或"确认/取消"同样生效（engine 解析）。
  */
 @Composable
-private fun PendingUiRow(
+internal fun PendingUiRow(
     pending: UiAction?,
     onChoice: (Int) -> Unit,
     onConfirm: (Boolean) -> Unit,

@@ -93,14 +93,15 @@ object ToolDefs {
                 {
                   "type": "object",
                   "properties": {
-                    "action": { "type": "string", "enum": ["create", "list", "cancel", "pause", "resume"], "description": "操作类型" },
+                    "action": { "type": "string", "enum": ["create", "list", "cancel", "pause", "resume", "update_interval"], "description": "操作类型（update_interval：调整巡查间隔）" },
                     "kind": { "type": "string", "enum": ["reminder", "poll"], "description": "create 时：reminder=一次性到点提醒，poll=周期巡查（如盯快递、每天提醒）" },
                     "title": { "type": "string", "description": "任务标题，如「盯 XX 快递签收」「打坐」" },
                     "when_text": { "type": "string", "description": "reminder 的时间描述，如「明天 8:30」「2小时后」；poll 的「每天 15 点」也可放这里" },
-                    "interval_minutes": { "type": "integer", "description": "poll 的巡查间隔分钟数（最小 15），如每小时=60" },
+                    "interval_minutes": { "type": "integer", "description": "poll 的巡查间隔分钟数（最小 15），如每小时=60；update_interval 时为新的间隔" },
                     "tracking_no": { "type": "string", "description": "盯快递时：快递单号（8-15位）。提供后任务会用真实快递跟踪（需在设置里配置快递100 查询凭据）" },
                     "company": { "type": "string", "description": "盯快递时：快递公司（如 顺丰/中通/ems），可省略自动识别" },
-                    "id": { "type": "integer", "description": "cancel/pause/resume 时：任务 id（list 可见）；无 id 时按 title 模糊匹配" }
+                    "flight_no": { "type": "string", "description": "盯航班时：航班号（航司码+3-4位数字，如 CA1234）。提供后任务会用真实航班跟踪（需在设置里配置 AviationStack access_key）" },
+                    "id": { "type": "integer", "description": "cancel/pause/resume/update_interval 时：任务 id（list 可见）；无 id 时按 title 模糊匹配" }
                   },
                   "required": ["action"]
                 }

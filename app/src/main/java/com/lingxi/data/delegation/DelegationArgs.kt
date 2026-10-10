@@ -15,11 +15,15 @@ object DelegationArgs {
             /** R9：快递单号（非空 → EXPRESS 类型任务，真实检查器跟踪） */
             val trackingNo: String = "",
             val company: String = "",
+            /** R10：航班号（非空 → FLIGHT 类型任务，真实检查器跟踪） */
+            val flightNo: String = "",
         ) : Command
         data object List : Command
         data class Cancel(val id: Long?, val title: String) : Command
         data class Pause(val id: Long?, val title: String) : Command
         data class Resume(val id: Long?, val title: String) : Command
+        /** R10：调整巡查间隔并重排 worker（ParamPanel 直连回写） */
+        data class UpdateInterval(val id: Long?, val title: String, val intervalMinutes: Int) : Command
     }
 
     sealed interface Result {
@@ -46,6 +50,17 @@ object DelegationArgs {
             "cancel", "取消" -> cancelLike(Command::Cancel, id, title)
             "pause", "暂停" -> cancelLike(Command::Pause, id, title)
             "resume", "恢复" -> cancelLike(Command::Resume, id, title)
+            // R10：ParamPanel 直连回写（改巡查间隔落库）
+            "update_interval", "interval", "改间隔" -> {
+                val interval = args["interval_minutes"]?.trim()?.toIntOrNull()
+                if (interval == null || interval < 15) {
+                    Result.Error("改间隔需要 interval_minutes（最小 15 分钟）")
+                } else if (id == null && title.isBlank()) {
+                    Result.Error("需要任务 id 或 title")
+                } else {
+                    Result.Ok(Command.UpdateInterval(id, title, interval))
+                }
+            }
             else -> Result.Error("未知 action：${action.ifBlank { "(空)" }}")
         }
     }
@@ -88,7 +103,10 @@ object DelegationArgs {
                 .ifBlank { ExpressTracking.extractTrackingNo(title)?.uppercase().orEmpty() }
             val company = (args["company"] ?: "").trim().lowercase()
                 .ifBlank { ExpressTracking.guessCompany(title) }
-            Result.Ok(Command.CreatePoll(title, interval, trackingNo, company))
+            // R10 F13：显式 flight_no 参数，或标题里带航班号 → FLIGHT 真实检查器
+            val flightNo = (args["flight_no"] ?: "").trim().uppercase()
+                .ifBlank { FlightTracking.extractFlightNo(title)?.uppercase().orEmpty() }
+            Result.Ok(Command.CreatePoll(title, interval, trackingNo, company, flightNo))
         }
     }
 

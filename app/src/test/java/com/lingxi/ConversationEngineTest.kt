@@ -366,4 +366,68 @@ class ConversationEngineTest {
         assertEquals(1, engine.history.value.size)
         assertTrue(engine.history.value[0].reply.contains("没找到最近的截图"))
     }
+
+    // ---- R10 ParamPanel 与 manage_task 创建直连 ----
+
+    @Test
+    fun `manage_task 创建巡查 - ParamPanel 弹出且改间隔回写`() = runTest {
+        val panel = UiAction(
+            type = UiAction.UiType.ParamPanel,
+            title = "确认巡查参数",
+            body = "任务「盯快递」，可调整巡查间隔（最小 15 分钟）",
+            confirmLabel = "按这个来",
+            fields = listOf(UiAction.ParamField("interval_minutes", "巡查间隔（分钟）", "60")),
+        )
+        val ex = FakeExecutor(
+            ActionResult.ok(
+                "收到，我会每小时盯一次",
+                cardTitle = "委托任务已创建",
+                paramPanel = panel,
+                paramTaskId = 7L,
+            ),
+            ActionResult.ok("已把间隔改成每45分钟"),
+        )
+        val engine = ConversationEngine(
+            FakeLlm(listOf(
+                LlmEvent.ToolCall("manage_task", """{"action":"create","kind":"poll","title":"盯快递","interval_minutes":"60"}"""),
+            )),
+            FakeTts(), FakeMemoryStore(), ex, FakeCaptor())
+        val job = launch { engine.runTurn("盯着快递", "k", "u", "m") }
+        testScheduler.runCurrent()
+        assertEquals(UiAction.UiType.ParamPanel, engine.pendingUi.value?.type)
+        engine.onUiParams("""{"interval_minutes":"45"}""")
+        job.join()
+        // 第二次执行 = update_interval 回写
+        assertEquals(2, ex.calls.size)
+        assertEquals("manage_task", ex.calls[1].first)
+        assertTrue(ex.calls[1].second.contains("update_interval"))
+        assertTrue(ex.calls[1].second.contains("45"))
+        // 面板快照挂账（替代 InfoCard），摘要含新值
+        val card = engine.history.value.last().ui.single()
+        assertEquals(UiAction.UiType.ParamPanel, card.type)
+        assertTrue(card.resolvedText!!.contains("45"))
+    }
+
+    @Test
+    fun `manage_task 创建巡查 - 面板超时按默认间隔且不回写`() = runTest {
+        val panel = UiAction(
+            type = UiAction.UiType.ParamPanel,
+            title = "确认巡查参数",
+            fields = listOf(UiAction.ParamField("interval_minutes", "巡查间隔（分钟）", "60")),
+        )
+        val ex = FakeExecutor(
+            ActionResult.ok("收到", paramPanel = panel, paramTaskId = 7L),
+        )
+        val engine = ConversationEngine(
+            FakeLlm(listOf(
+                LlmEvent.ToolCall("manage_task", """{"action":"create","kind":"poll","title":"盯快递"}"""),
+            )),
+            FakeTts(), FakeMemoryStore(), ex, FakeCaptor())
+        val job = launch { engine.runTurn("盯着快递", "k", "u", "m") }
+        job.join()
+        // 超时不回写 update_interval
+        assertEquals(1, ex.calls.size)
+        val card = engine.history.value.last().ui.single()
+        assertEquals("超时，按默认间隔执行", card.resolvedText)
+    }
 }

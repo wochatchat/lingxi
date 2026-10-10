@@ -86,7 +86,15 @@ class PollWorker(appContext: Context, params: WorkerParameters) :
             }
             is TaskUpdate.Final -> {
                 entry.delegation().complete(id, update.text)
-                entry.notifier().post("委托有结果：${task.title}", update.text)
+                // R10：快递到驿站/快递柜完结 → 通知里追问取件码（用户回复后我帮他记住）
+                if (update.followup == Followup.PICKUP_CODE) {
+                    entry.notifier().post(
+                        "快递到了，取件码是多少？",
+                        "「${task.title}」已到代收点。回灵犀一句取件码，我帮你记下来；取完说「取完了」即可。",
+                    )
+                } else {
+                    entry.notifier().post("委托有结果：${task.title}", update.text)
+                }
                 Result.success()
             }
             is TaskUpdate.Progress -> {

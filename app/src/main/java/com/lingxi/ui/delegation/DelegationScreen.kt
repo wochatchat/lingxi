@@ -54,6 +54,8 @@ data class DelegationUiState(
     /** R9 快递查询凭据（快递100），空 = 未配置（快递委托回落占位巡查） */
     val expressCustomer: String = "",
     val expressKey: String = "",
+    /** R10 航班查询凭据（AviationStack access_key），空 = 未配置 */
+    val flightApiKey: String = "",
 )
 
 @HiltViewModel
@@ -67,8 +69,9 @@ class DelegationViewModel @Inject constructor(
         settings.lastMorningReport,
         settings.expressCustomer,
         settings.expressKey,
-    ) { tasks, report, customer, key ->
-        DelegationUiState(tasks, report, customer, key)
+        settings.flightApiKey,
+    ) { tasks, report, customer, key, flightKey ->
+        DelegationUiState(tasks, report, customer, key, flightKey)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DelegationUiState())
 
     fun pause(id: Long) = viewModelScope.launch { delegation.pause(id) }
@@ -79,6 +82,11 @@ class DelegationViewModel @Inject constructor(
     fun saveExpressCredentials(customer: String, key: String) = viewModelScope.launch {
         settings.setExpressCustomer(customer)
         settings.setExpressKey(key)
+    }
+
+    /** R10：保存航班查询凭据 */
+    fun saveFlightApiKey(key: String) = viewModelScope.launch {
+        settings.setFlightApiKey(key)
     }
 }
 
@@ -129,6 +137,13 @@ fun DelegationScreen(
                     customer = ui.expressCustomer,
                     key = ui.expressKey,
                     onSave = vm::saveExpressCredentials,
+                )
+            }
+            // R10 F13：航班查询凭据（AviationStack access_key），未配置时航班委托只打卡
+            item {
+                FlightConfigCard(
+                    apiKey = ui.flightApiKey,
+                    onSave = vm::saveFlightApiKey,
                 )
             }
             if (ui.tasks.isEmpty()) {
@@ -196,6 +211,41 @@ private fun ExpressConfigCard(
             )
             TextButton(
                 onClick = { onSave(customerText, keyText) },
+                modifier = Modifier.padding(top = 4.dp),
+            ) { Text("保存") }
+        }
+    }
+}
+
+/** R10：航班查询凭据卡片（AviationStack access_key，保存到 DataStore） */
+@androidx.compose.runtime.Composable
+private fun FlightConfigCard(
+    apiKey: String,
+    onSave: (String) -> Unit,
+) {
+    var keyText by remember(apiKey) { mutableStateOf(apiKey) }
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                "航班查询（AviationStack）",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                if (apiKey.isBlank()) "未配置：盯航班任务只做打卡巡查；配置后走真实航班跟踪"
+                else "已配置真实航班跟踪",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = keyText,
+                onValueChange = { keyText = it },
+                label = { Text("access_key") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            TextButton(
+                onClick = { onSave(keyText) },
                 modifier = Modifier.padding(top = 4.dp),
             ) { Text("保存") }
         }

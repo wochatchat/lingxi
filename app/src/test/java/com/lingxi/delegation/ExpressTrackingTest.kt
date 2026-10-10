@@ -82,4 +82,37 @@ class ExpressTrackingTest {
         assertFalse(ExpressTracking.isFinal("""{"status":"200","ischeck":"0","data":[]}"""))
         assertFalse(ExpressTracking.isFinal("not json"))
     }
+
+    // ---- R10：完结追问取件码 ----
+
+    @Test
+    fun pickupFollowup_stationSignoff() {
+        // 签收 + 最新轨迹在驿站 → 追问取件码
+        val body = """
+            {"status":"200","state":"3","ischeck":"1",
+             "data":[{"time":"2026-10-10 08:00:00","context":"运输中"},
+                     {"time":"2026-10-10 09:00:00","context":"您的快件已放入菜鸟驿站，请凭取件码领取"}]}
+        """.trimIndent()
+        assertTrue(ExpressTracking.needsPickupFollowup(body))
+    }
+
+    @Test
+    fun pickupFollowup_directSignoff() {
+        // 签收但无驿站/快递柜字样（快递员送到手）→ 不追问
+        val body = """
+            {"status":"200","state":"3","ischeck":"1",
+             "data":[{"context":"您的快件已签收，如有疑问请致电快递员"}]}
+        """.trimIndent()
+        assertFalse(ExpressTracking.needsPickupFollowup(body))
+    }
+
+    @Test
+    fun pickupFollowup_notSigned() {
+        // 在途/派送中不算完结 → 不追问
+        val body = """
+            {"status":"200","state":"5","ischeck":"0",
+             "data":[{"context":"快件已到达菜鸟驿站"}]}
+        """.trimIndent()
+        assertFalse(ExpressTracking.needsPickupFollowup(body))
+    }
 }

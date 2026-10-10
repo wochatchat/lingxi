@@ -18,16 +18,24 @@ object TaskKind {
 
 /**
  * 委托任务检查器类型（R9 F13 真实检查器路由用）：
- * GENERIC 走默认占位检查器；EXPRESS 快递跟踪（快递100）。
+ * GENERIC 走默认占位检查器；EXPRESS 快递跟踪（快递100）；FLIGHT 航班跟踪（R10）。
  */
 object TaskType {
     const val GENERIC = "GENERIC"
     const val EXPRESS = "EXPRESS"
+    const val FLIGHT = "FLIGHT"
+}
+
+/** R10：检查器完结后的追问类型（快递签收 → 追问取件码） */
+object Followup {
+    const val NONE = ""
+    const val PICKUP_CODE = "pickup_code"
 }
 
 /**
  * paramsJson 的解析视图（纯函数，可单测）。
  * EXPRESS：{"tracking_no":"SF1234567890","company":"shunfeng"}
+ * FLIGHT（R10）：{"flight_no":"CA1234"}
  */
 object TaskParams {
 
@@ -50,6 +58,18 @@ object TaskParams {
 
     fun encodeExpress(trackingNo: String, company: String): String =
         """{"tracking_no":"$trackingNo","company":"$company"}"""
+
+    /** R10 航班号（如 CA1234） */
+    fun flightNo(json: String): String =
+        runCatching {
+            (kotlinx.serialization.json.Json.parseToJsonElement(json) as? kotlinx.serialization.json.JsonObject)
+                ?.get("flight_no")
+                ?.let { it as? kotlinx.serialization.json.JsonPrimitive }
+                ?.content
+        }.getOrNull().orEmpty()
+
+    fun encodeFlight(flightNo: String): String =
+        """{"flight_no":"$flightNo"}"""
 }
 
 /** 委托任务状态 */

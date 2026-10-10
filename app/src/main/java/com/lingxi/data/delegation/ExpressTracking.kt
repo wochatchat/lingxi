@@ -79,6 +79,24 @@ object ExpressTracking {
         }.getOrNull() ?: return false
         return root["ischeck"]?.let { it as? kotlinx.serialization.json.JsonPrimitive }?.content == "1"
     }
+
+    /**
+     * 完结后是否需要追问取件码（R10）：已签收（state=3）且最新轨迹落在驿站/快递柜/
+     * 代收点，说明件已放到代收点待自取 → 追问取件码；快递员直接送到手的不用问。
+     */
+    fun needsPickupFollowup(body: String): Boolean {
+        val root = runCatching {
+            Json.parseToJsonElement(body).let { it as? kotlinx.serialization.json.JsonObject }
+        }.getOrNull() ?: return false
+        val state = root["state"]?.let { it as? kotlinx.serialization.json.JsonPrimitive }?.content
+        val last = (root["data"] as? kotlinx.serialization.json.JsonArray)
+            ?.lastOrNull()?.let { it as? kotlinx.serialization.json.JsonObject }
+            ?.get("context")?.let { it as? kotlinx.serialization.json.JsonPrimitive }?.content
+            .orEmpty()
+        return state == "3" && STATION_WORDS.any { it in last }
+    }
+
+    private val STATION_WORDS = listOf("驿站", "快递柜", "代收点", "货架", "丰巢", "菜鸟", "自提柜", "代收")
 }
 
 @Singleton
