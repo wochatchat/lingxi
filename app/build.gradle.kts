@@ -128,9 +128,8 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
 
     // R7 主动服务：WorkManager（F13 委托任务 / F11 晨报 / F12 日程提醒）
+    // worker 用默认工厂 + Hilt EntryPoint 取依赖（@HiltWorker 与当前 KSP 组合有兼容问题，已绕开）
     implementation(libs.androidx.work.runtime.ktx)
-    implementation(libs.androidx.hilt.work)
-    ksp(libs.androidx.hilt.compiler)
 
     // Networking — R1 多 Provider LLM 客户端基础
     implementation(libs.okhttp)

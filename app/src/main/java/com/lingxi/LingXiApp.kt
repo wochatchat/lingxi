@@ -1,8 +1,6 @@
 package com.lingxi
 
 import android.app.Application
-import androidx.hilt.work.HiltWorkerFactory
-import androidx.work.Configuration
 import com.lingxi.data.Notifier
 import com.lingxi.data.SettingsRepository
 import com.lingxi.data.delegation.DelegationRepository
@@ -18,19 +16,12 @@ import java.time.LocalTime
 import javax.inject.Inject
 
 @HiltAndroidApp
-class LingXiApp : Application(), androidx.work.Configuration.Provider {
+class LingXiApp : Application() {
 
     @Inject lateinit var settings: SettingsRepository
-    @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var delegation: DelegationRepository
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    /** WorkManager + Hilt：worker 通过 HiltWorkerFactory 注入依赖 */
-    override val workManagerConfiguration: androidx.work.Configuration
-        get() = androidx.work.Configuration.Builder()
-            .setWorkerFactory(workerFactory)
-            .build()
 
     override fun onCreate() {
         super.onCreate()
