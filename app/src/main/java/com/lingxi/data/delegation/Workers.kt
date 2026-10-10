@@ -41,7 +41,7 @@ class ReminderWorker(appContext: Context, params: WorkerParameters) :
     override suspend fun doWork(): Result {
         val id = inputData.getLong(KEY_TASK_ID, -1)
         if (id <= 0) return Result.failure()
-        val entry = entry()
+        val entry = applicationContext.entry()
         val task = entry.delegation().byId(id) ?: return Result.success()
         if (task.status != TaskStatus.ACTIVE) return Result.success()
         entry.delegation().complete(
@@ -71,7 +71,7 @@ class PollWorker(appContext: Context, params: WorkerParameters) :
     override suspend fun doWork(): Result {
         val id = inputData.getLong(ReminderWorker.KEY_TASK_ID, -1)
         if (id < 0) return Result.failure()
-        val entry = entry()
+        val entry = applicationContext.entry()
         val task = entry.delegation().byId(id) ?: return Result.success()
         if (task.status != TaskStatus.ACTIVE) return Result.success()
 
@@ -98,7 +98,7 @@ class MorningReportWorker(appContext: Context, params: WorkerParameters) :
     androidx.work.CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        val entry = entry()
+        val entry = applicationContext.entry()
         val settings = entry.settings()
         if (settings.morningReportEnabled.first()) {
             val city = settings.morningReportCity.first()

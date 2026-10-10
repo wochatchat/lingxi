@@ -146,7 +146,7 @@ class DelegationRepository @Inject constructor(
     }
 
     private fun schedulePoll(id: Long, intervalMinutes: Int) {
-        val request = PeriodicWorkRequestBuilder<PollWorker>(intervalMinutes.coerceAtLeast(15), TimeUnit.MINUTES)
+        val request = PeriodicWorkRequestBuilder<PollWorker>(intervalMinutes.coerceAtLeast(15).toLong(), TimeUnit.MINUTES)
             .setInputData(androidx.work.workDataOf(ReminderWorker.KEY_TASK_ID to id))
             .build()
         workManager.enqueueUniquePeriodicWork("poll-$id", ExistingPeriodicWorkPolicy.UPDATE, request)
