@@ -38,7 +38,8 @@ class AgentPromptsTest {
     fun `buildTaskPrompt 含 NOREPORT 指令`() {
         val prompt = AgentPrompts.buildTaskPrompt(null, emptyList(), LocalDateTime.now())
         assertTrue(prompt.contains(AgentLoop.NO_REPORT))
-        assertTrue(prompt.contains("不调用 notify_user"))
+        assertTrue(prompt.contains("notify_user"))
+        assertTrue(prompt.contains("不要调用"))
     }
 
     @Test

@@ -78,6 +78,7 @@ class AgentLoop(
             }
         }
         // 自检总结：步数用尽，强制收敛（不带工具，防继续打转）
+        step++ // 自检总结计为一步
         val finalMessages = buildStepMessages(cfg.systemPrompt, cfg.task, log, forceSummary = true)
         val (finalText, _) = callOnce(cfg, finalMessages, tools = null).getOrElse { err ->
             return AgentOutcome(null, step, log.toList(), error = err.message)

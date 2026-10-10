@@ -27,7 +27,8 @@ class TaskTimeTest {
         val w = TaskTime.parse("15点", now, zone) as TaskTime.When.At
         val expected = LocalDateTime.of(2026, 10, 10, 15, 0).atZone(zone).toInstant().toEpochMilli()
         assertEquals(expected, w.epochMillis)
-        assertTrue(w.human.contains("今天"))
+        // human 走 formatAt（相对真实今天），固定 now 会随日期翻车 → 只断言时间部分
+        assertTrue(w.human.contains("15:00"))
     }
 
     @Test
@@ -77,8 +78,10 @@ class TaskTimeTest {
 
     @Test
     fun `formatAt 带今天明天前缀`() {
-        val tomorrow = now + 24 * 60 * 60_000L
-        assertTrue(TaskTime.formatAt(now, zone).startsWith("今天"))
+        // R12 教训：写死日期会随真实日期翻车（R7 已踩过时间断言坑），改动态 now
+        val base = System.currentTimeMillis()
+        val tomorrow = base + 24 * 60 * 60_000L
+        assertTrue(TaskTime.formatAt(base, zone).startsWith("今天"))
         assertTrue(TaskTime.formatAt(tomorrow, zone).startsWith("明天"))
     }
 }

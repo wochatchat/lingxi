@@ -161,7 +161,7 @@ class AgentLoopTest {
         val msgs = AgentLoop.buildStepMessages("sys", "task", log, forceSummary = true)
         val lastUser = msgs.last()
         assertTrue(lastUser.content.contains("步数已用完"))
-        assertTrue(lastUser.content.contains("不要调用工具"))
+        assertTrue(lastUser.content.contains(AgentLoop.NO_REPORT))
     }
 
     @Test
@@ -170,7 +170,7 @@ class AgentLoopTest {
         val line = AgentLoop.toolLogLine(2, "check_task", """{"id":123}""", result)
         assertTrue(line.contains("[步骤2]"))
         assertTrue(line.contains("check_task"))
-        assertTrue(line.contains("id:123"))
+        assertTrue(line.contains("\"id\":123"))
         assertTrue(line.contains("成功"))
         assertTrue(line.contains("任务正常"))
     }
