@@ -56,12 +56,15 @@ data class GeneralUiState(
     val calendarLeadMinutes: Int = 15,
     /** F16 全离线模式 */
     val offlineMode: Boolean = false,
+    /** R11 开机自启 */
+    val autoStartOnBoot: Boolean = true,
 )
 
 private data class BaseFlags(
     val capsule: Boolean = false,
     val listen: Boolean = false,
     val offline: Boolean = false,
+    val autoStart: Boolean = true,
 )
 
 private data class ProactiveConfig(
@@ -82,7 +85,8 @@ class GeneralSettingsViewModel @Inject constructor(
         settings.capsuleEnabled,
         settings.alwaysListenEnabled,
         settings.offlineModeEnabled,
-    ) { c, l, o -> BaseFlags(c, l, o) }
+        settings.autoStartOnBoot,
+    ) { c, l, o, a -> BaseFlags(c, l, o, a) }
 
     private val proactive = combine(
         settings.morningReportEnabled,
@@ -104,12 +108,14 @@ class GeneralSettingsViewModel @Inject constructor(
             calendarReminderEnabled = p.calendarEnabled,
             calendarLeadMinutes = p.calendarLead,
             offlineMode = b.offline,
+            autoStartOnBoot = b.autoStart,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), GeneralUiState())
 
     fun setCapsule(enabled: Boolean) = viewModelScope.launch { settings.setCapsuleEnabled(enabled) }
     fun setAlwaysListen(enabled: Boolean) = viewModelScope.launch { settings.setAlwaysListenEnabled(enabled) }
     fun setOfflineMode(enabled: Boolean) = viewModelScope.launch { settings.setOfflineMode(enabled) }
+    fun setAutoStartOnBoot(enabled: Boolean) = viewModelScope.launch { settings.setAutoStartOnBoot(enabled) }
     fun setMorningReportEnabled(enabled: Boolean) = viewModelScope.launch { settings.setMorningReportEnabled(enabled) }
     fun setMorningReportTime(time: String) = viewModelScope.launch { settings.setMorningReportTime(time) }
     fun setMorningReportCity(city: String) = viewModelScope.launch { settings.setMorningReportCity(city) }
@@ -205,6 +211,12 @@ fun GeneralSettingsScreen(
                     "来不及等它反应时，可在卡片上按住麦克风直接说话（按键说话逃生）。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SwitchRow(
+                title = "开机自启",
+                subtitle = "开机 / 应用更新后自动恢复常驻服务（胶囊或常听开启时生效）；受厂商自启管理影响，见首启引导中的厂商设置",
+                checked = ui.autoStartOnBoot,
+                onCheckedChange = { on -> vm.setAutoStartOnBoot(on) },
             )
             ScreenshotQaSection(vm)
             OfflineModeSection(ui, vm)

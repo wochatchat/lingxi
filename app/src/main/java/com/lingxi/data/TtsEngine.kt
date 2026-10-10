@@ -19,6 +19,9 @@ interface TtsEngine {
     fun enqueue(text: String)
     fun stop()
     suspend fun awaitIdle()
+
+    /** R11 降延迟：提前初始化底层引擎（首次播报省 300-800ms init），默认空实现 */
+    fun warmUp() {}
 }
 
 /** 系统 TextToSpeech 引擎（离线可用，随系统音色） */
@@ -86,5 +89,10 @@ class SystemTtsEngine @javax.inject.Inject constructor(
         if (runCatching { initDone.await() }.getOrDefault(false) && pending > 0) {
             idleSignal.await()
         }
+    }
+
+    /** R11 预热：App 启动即后台 init TTS（调用方在 IO 线程发起） */
+    override fun warmUp() {
+        runCatching { ensureInit() }
     }
 }

@@ -38,8 +38,14 @@ class LingXiApp : Application() {
             ) { capsule, listen -> capsule || listen }
                 .distinctUntilChanged()
                 .collect { on ->
-                    if (on) FloatingCapsuleService.start(this@LingXiApp)
-                    else FloatingCapsuleService.stop(this@LingXiApp)
+                    if (on) {
+                        FloatingCapsuleService.start(this@LingXiApp)
+                        // R11 保活心跳：常驻开启期间 15min 自检拉起
+                        com.lingxi.data.keepalive.KeepAliveWorker.schedule(this@LingXiApp, true)
+                    } else {
+                        com.lingxi.data.keepalive.KeepAliveWorker.schedule(this@LingXiApp, false)
+                        FloatingCapsuleService.stop(this@LingXiApp)
+                    }
                 }
         }
         // R7 主动服务：晨报（F11）+ 日程提醒（F12）随设置启停
@@ -71,6 +77,8 @@ class LingXiApp : Application() {
         }
         // R8 F17 功耗采样：App 进程存活期间记录电量（BATTERY_CHANGED 是粘性广播，进程死掉即停，重启后继续）
         registerReceiver(batteryReceiver, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+        // R11 语音降延迟：启动即预热 TTS 引擎（IO 线程，首次播报省 init 耗时）
+        appScope.launch(Dispatchers.IO) { runCatching { tts.warmUp() } }
     }
 
     private val batteryReceiver = object : android.content.BroadcastReceiver() {

@@ -114,12 +114,18 @@ class FloatingCapsuleService : Service() {
                 Intent.ACTION_SCREEN_ON -> {
                     if (alwaysListenOn && listenJob == null) startAlwaysListen()
                 }
+                // R11 自启兜底：解锁后重试 mic 类型叠加 + 常听管线（开屏广播随服务常驻）
+                Intent.ACTION_USER_PRESENT -> {
+                    refreshForegroundType()
+                    if (alwaysListenOn && listenJob == null) startAlwaysListen()
+                }
             }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         createChannel()
         refreshForegroundType()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -136,6 +142,8 @@ class FloatingCapsuleService : Service() {
         val screenFilter = android.content.IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
+            // R11 自启兜底：解锁后补齐 mic 类型 FGS 叠加（BOOT 后系统禁止直接起 mic 类 FGS）
+            addAction(Intent.ACTION_USER_PRESENT)
         }
         registerReceiver(screenStateReceiver, screenFilter)
     }
@@ -150,6 +158,7 @@ class FloatingCapsuleService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         runCatching { unregisterReceiver(screenStateReceiver) }
         removeViews()
         listenJob?.cancel()
@@ -613,6 +622,10 @@ class FloatingCapsuleService : Service() {
     companion object {
         private const val CHANNEL_ID = "lingxi_capsule"
         private const val NOTIFICATION_ID = 1001
+
+        /** R11 保活心跳用：服务进程内存活标志（KeepAliveWorker 判断是否需要拉起） */
+        @Volatile var isRunning: Boolean = false
+            private set
         private const val CAPSULE_SIZE_DP = 46
         private const val CARD_WIDTH_DP = 250
         private const val PREBUF_CHUNKS = 6          // 语音起点前 600ms 预缓冲

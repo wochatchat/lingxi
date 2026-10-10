@@ -169,4 +169,14 @@ class SettingsRepository @javax.inject.Inject constructor(
     suspend fun setFlightApiKey(value: String) {
         context.settingsDataStore.edit { it[flightApiKeyKey] = value.trim() }
     }
+
+    // R11 保活与自启：开机自启开关（默认开；受厂商自启管理影响，见首启引导 BrandGuide）
+    private val autoStartOnBootKey = booleanPreferencesKey("auto_start_on_boot")
+
+    val autoStartOnBoot: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[autoStartOnBootKey] ?: true }
+
+    suspend fun setAutoStartOnBoot(enabled: Boolean) {
+        context.settingsDataStore.edit { it[autoStartOnBootKey] = enabled }
+    }
 }
