@@ -13,6 +13,7 @@ import com.lingxi.service.FloatingCapsuleService
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 
 /**
