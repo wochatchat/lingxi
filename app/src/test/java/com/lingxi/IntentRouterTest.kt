@@ -4,6 +4,7 @@ import com.lingxi.data.IntentRouter
 import com.lingxi.data.IntentRouter.Route
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class IntentRouterTest {
