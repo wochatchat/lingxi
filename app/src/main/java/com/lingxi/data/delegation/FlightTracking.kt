@@ -87,8 +87,8 @@ class FlightClient @Inject constructor() {
             if (accessKey.isBlank() || !FlightTracking.isFlightNo(flightNo)) return@withContext null
             runCatching {
                 val url = "https://api.aviationstack.com/v1/flights" +
-                    "?access_key=" + okhttp3.HttpUrl.Companion.encode(accessKey, "UTF-8") +
-                    "&flight_iata=" + okhttp3.HttpUrl.Companion.encode(flightNo, "UTF-8") +
+                    "?access_key=" + java.net.URLEncoder.encode(accessKey, "UTF-8") +
+                    "&flight_iata=" + java.net.URLEncoder.encode(flightNo, "UTF-8") +
                     "&limit=1"
                 val request = Request.Builder().url(url).get().build()
                 client.newCall(request).execute().use { it.body?.string() }
