@@ -17,7 +17,7 @@ import java.time.ZoneId
  * worker 用默认反射工厂创建，依赖在 doWork 里通过 EntryPoint 现取。
  */
 @EntryPoint
-@InstallIn(android.hilt.components.SingletonComponent::class)
+@InstallIn(dagger.hilt.components.SingletonComponent::class)
 interface WorkerEntryPoint {
     fun delegation(): DelegationRepository
     fun settings(): com.lingxi.data.SettingsRepository
