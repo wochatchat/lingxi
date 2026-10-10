@@ -18,9 +18,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -47,6 +49,24 @@ import javax.inject.Inject
 data class GeneralUiState(
     val capsuleEnabled: Boolean = false,
     val alwaysListenEnabled: Boolean = false,
+    val morningReportEnabled: Boolean = false,
+    val morningReportTime: String = "08:00",
+    val morningReportCity: String = "",
+    val calendarReminderEnabled: Boolean = false,
+    val calendarLeadMinutes: Int = 15,
+)
+
+private data class BaseFlags(
+    val capsule: Boolean = false,
+    val listen: Boolean = false,
+)
+
+private data class ProactiveConfig(
+    val morningEnabled: Boolean = false,
+    val morningTime: String = "08:00",
+    val morningCity: String = "",
+    val calendarEnabled: Boolean = false,
+    val calendarLead: Int = 15,
 )
 
 @HiltViewModel
@@ -55,14 +75,40 @@ class GeneralSettingsViewModel @Inject constructor(
     private val settings: SettingsRepository,
 ) : AndroidViewModel(application) {
 
-    val state = combine(
+    private val base = combine(
         settings.capsuleEnabled,
         settings.alwaysListenEnabled,
-    ) { c, l -> GeneralUiState(c, l) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), GeneralUiState())
+    ) { c, l -> BaseFlags(c, l) }
+
+    private val proactive = combine(
+        settings.morningReportEnabled,
+        settings.morningReportTime,
+        settings.morningReportCity,
+        settings.calendarReminderEnabled,
+        settings.calendarLeadMinutes,
+    ) { on, time, city, cal, lead ->
+        ProactiveConfig(on, time, city, cal, lead)
+    }
+
+    val state = combine(base, proactive) { b, p ->
+        GeneralUiState(
+            capsuleEnabled = b.capsule,
+            alwaysListenEnabled = b.listen,
+            morningReportEnabled = p.morningEnabled,
+            morningReportTime = p.morningTime,
+            morningReportCity = p.morningCity,
+            calendarReminderEnabled = p.calendarEnabled,
+            calendarLeadMinutes = p.calendarLead,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), GeneralUiState())
 
     fun setCapsule(enabled: Boolean) = viewModelScope.launch { settings.setCapsuleEnabled(enabled) }
     fun setAlwaysListen(enabled: Boolean) = viewModelScope.launch { settings.setAlwaysListenEnabled(enabled) }
+    fun setMorningReportEnabled(enabled: Boolean) = viewModelScope.launch { settings.setMorningReportEnabled(enabled) }
+    fun setMorningReportTime(time: String) = viewModelScope.launch { settings.setMorningReportTime(time) }
+    fun setMorningReportCity(city: String) = viewModelScope.launch { settings.setMorningReportCity(city) }
+    fun setCalendarReminder(enabled: Boolean) = viewModelScope.launch { settings.setCalendarReminderEnabled(enabled) }
+    fun setCalendarLeadMinutes(minutes: Int) = viewModelScope.launch { settings.setCalendarLeadMinutes(minutes) }
 }
 
 /**
@@ -142,6 +188,76 @@ fun GeneralSettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            MorningReportSection(ui, vm)
+            CalendarReminderSection(ui, vm)
+        }
+    }
+}
+
+/** F11 晨报：开关 + 时间 + 城市（天气源 Open-Meteo，无需 Key） */
+@Composable
+private fun MorningReportSection(ui: GeneralUiState, vm: GeneralSettingsViewModel) {
+    SwitchRow(
+        title = "晨报",
+        subtitle = "每天在设定时间推送：天气 + 今日日程 + 委托任务进展（需通知权限）",
+        checked = ui.morningReportEnabled,
+        onCheckedChange = vm::setMorningReportEnabled,
+    )
+    if (ui.morningReportEnabled) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = ui.morningReportTime,
+                onValueChange = { vm.setMorningReportTime(it) },
+                label = { Text("时间（HH:mm）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = ui.morningReportCity,
+                onValueChange = { vm.setMorningReportCity(it) },
+                label = { Text("城市（可选，用于天气，如「上海」）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+/** F12 日程提醒：开关 + 提前分钟数 + 日历权限 */
+@Composable
+private fun CalendarReminderSection(ui: GeneralUiState, vm: GeneralSettingsViewModel) {
+    val context = LocalContext.current
+    val calendarLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) vm.setCalendarReminder(true) }
+    SwitchRow(
+        title = "日程提醒",
+        subtitle = "读系统日历，日程开始前提前提醒（语音/卡片）",
+        checked = ui.calendarReminderEnabled,
+        onCheckedChange = { on ->
+            val granted = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.READ_CALENDAR
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (on && !granted) calendarLauncher.launch(Manifest.permission.READ_CALENDAR)
+            else vm.setCalendarReminder(on)
+        },
+    )
+    if (ui.calendarReminderEnabled) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "提前提醒：${ui.calendarLeadMinutes} 分钟",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(5, 10, 15, 30).forEach { minutes ->
+                    FilterChip(
+                        selected = ui.calendarLeadMinutes == minutes,
+                        onClick = { vm.setCalendarLeadMinutes(minutes) },
+                        label = { Text("$minutes 分钟") },
+                    )
+                }
+            }
         }
     }
 }

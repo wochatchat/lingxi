@@ -33,6 +33,18 @@ class IntentRouterTest {
     }
 
     @Test
+    fun `每天提醒走委托任务 ToolsLlm 而非 set_alarm`() {
+        val route = IntentRouter.route("每天下午3点提醒我打坐")
+        assertTrue(route is Route.ToolsLlm)
+    }
+
+    @Test
+    fun `盯快递走 ToolsLlm`() {
+        val route = IntentRouter.route("帮我盯着这个快递到了告诉我")
+        assertTrue(route is Route.ToolsLlm)
+    }
+
+    @Test
     fun `打开应用走 DIRECT`() {
         val route = IntentRouter.route("打开微信") as Route.Direct
         assertEquals("open_app", route.toolName)

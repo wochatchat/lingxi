@@ -3,6 +3,8 @@ package com.lingxi.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -42,5 +44,62 @@ class SettingsRepository @javax.inject.Inject constructor(
 
     suspend fun setFirstLaunchDone(done: Boolean) {
         context.settingsDataStore.edit { it[firstLaunchDoneKey] = done }
+    }
+
+    // ---- R7 主动服务（F11 晨报 / F12 日程提醒） ----
+
+    private val morningReportEnabledKey = booleanPreferencesKey("morning_report_enabled")
+    private val morningReportTimeKey = stringPreferencesKey("morning_report_time")
+    private val morningReportCityKey = stringPreferencesKey("morning_report_city")
+    private val lastMorningReportKey = stringPreferencesKey("last_morning_report")
+    private val calendarReminderEnabledKey = booleanPreferencesKey("calendar_reminder_enabled")
+    private val calendarLeadMinutesKey = intPreferencesKey("calendar_lead_minutes")
+
+    /** F11 晨报开关（默认关） */
+    val morningReportEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[morningReportEnabledKey] ?: false }
+
+    /** F11 晨报时间（HH:mm，默认 08:00） */
+    val morningReportTime: Flow<String> =
+        context.settingsDataStore.data.map { it[morningReportTimeKey] ?: "08:00" }
+
+    /** F11 晨报城市（空 = 不带天气） */
+    val morningReportCity: Flow<String> =
+        context.settingsDataStore.data.map { it[morningReportCityKey] ?: "" }
+
+    /** 最近一次晨报全文（列表页存档展示） */
+    val lastMorningReport: Flow<String> =
+        context.settingsDataStore.data.map { it[lastMorningReportKey] ?: "" }
+
+    /** F12 日程提醒开关（默认关；需要 READ_CALENDAR） */
+    val calendarReminderEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[calendarReminderEnabledKey] ?: false }
+
+    /** F12 提前提醒分钟数（默认 15） */
+    val calendarLeadMinutes: Flow<Int> =
+        context.settingsDataStore.data.map { it[calendarLeadMinutesKey] ?: 15 }
+
+    suspend fun setMorningReportEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[morningReportEnabledKey] = enabled }
+    }
+
+    suspend fun setMorningReportTime(time: String) {
+        context.settingsDataStore.edit { it[morningReportTimeKey] = time }
+    }
+
+    suspend fun setMorningReportCity(city: String) {
+        context.settingsDataStore.edit { it[morningReportCityKey] = city }
+    }
+
+    suspend fun setLastMorningReport(report: String) {
+        context.settingsDataStore.edit { it[lastMorningReportKey] = report }
+    }
+
+    suspend fun setCalendarReminderEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[calendarReminderEnabledKey] = enabled }
+    }
+
+    suspend fun setCalendarLeadMinutes(minutes: Int) {
+        context.settingsDataStore.edit { it[calendarLeadMinutesKey] = minutes }
     }
 }

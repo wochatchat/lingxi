@@ -2,6 +2,7 @@ package com.lingxi.di
 
 import android.content.Context
 import androidx.room.Room
+import com.lingxi.data.delegation.DelegationDao
 import com.lingxi.data.memory.MemoryDao
 import com.lingxi.data.memory.MemoryDb
 import com.lingxi.data.memory.MemoryRepository
@@ -22,10 +23,15 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideMemoryDb(@ApplicationContext context: Context): MemoryDb =
-        Room.databaseBuilder(context, MemoryDb::class.java, "lingxi_memory.db").build()
+        Room.databaseBuilder(context, MemoryDb::class.java, "lingxi_memory.db")
+            .addMigrations(com.lingxi.data.memory.MIGRATION_1_2)
+            .build()
 
     @Provides
     fun provideMemoryDao(db: MemoryDb): MemoryDao = db.memoryDao()
+
+    @Provides
+    fun provideDelegationDao(db: MemoryDb): DelegationDao = db.delegationDao()
 }
 
 @Module

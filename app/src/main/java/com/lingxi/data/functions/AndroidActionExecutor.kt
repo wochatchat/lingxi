@@ -15,15 +15,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 系统动作执行器（F8 四个工具的 Android 实现）：
+ * 系统动作执行器（F8 五个工具的 Android 实现）：
  * - set_alarm    → AlarmClock.ACTION_SET_ALARM（SKIP_UI=true，不弹设置界面）
  * - open_app     → PackageManager query → launch
  * - web_search   → AlarmClock.ACTION_WEB_SEARCH（系统默认搜索）
  * - send_sms     → Intent.ACTION_SENDTO（smsto: 预填收件人+正文）
+ * - manage_task  → F13 委托任务（DelegationRepository 落库 + WorkManager 调度）
  */
 @Singleton
 class AndroidActionExecutor @Inject constructor(
     @ApplicationContext private val app: Context,
+    private val delegation: com.lingxi.data.delegation.DelegationRepository,
 ) : ActionExecutor {
 
     override suspend fun execute(toolName: String, argsJson: String): ActionResult {
@@ -32,8 +34,88 @@ class AndroidActionExecutor @Inject constructor(
             "open_app" -> openApp(argsJson)
             "web_search" -> webSearch(argsJson)
             "send_sms" -> sendSms(argsJson)
+            "manage_task" -> manageTask(argsJson)
             else -> ActionResult.error("未知工具: $toolName")
         }
+    }
+
+    /** F13 委托任务：create/list/cancel/pause/resume */
+    private suspend fun manageTask(argsJson: String): ActionResult {
+        val parsed = com.lingxi.data.delegation.DelegationArgs.parse(
+            parseArgs(argsJson),
+            System.currentTimeMillis(),
+            java.time.ZoneId.systemDefault(),
+        )
+        val command = when (parsed) {
+            is com.lingxi.data.delegation.DelegationArgs.Result.Ok -> parsed.command
+            is com.lingxi.data.delegation.DelegationArgs.Result.Error -> return ActionResult.error(parsed.message)
+        }
+        return when (command) {
+            is com.lingxi.data.delegation.DelegationArgs.Command.CreateReminder -> {
+                val task = delegation.createReminder(command.title, command.atMillis)
+                ActionResult.ok(
+                    "好，${command.timeHuman}我会提醒你${command.title}",
+                    cardTitle = "委托任务已创建",
+                    cardBody = "${task.title}\n提醒时间：${command.timeHuman}",
+                )
+            }
+            is com.lingxi.data.delegation.DelegationArgs.Command.CreatePoll -> {
+                val task = delegation.createPoll(command.title, command.intervalMinutes)
+                ActionResult.ok(
+                    "收到，我会每${humanInterval(task.intervalMinutes)}盯一次「${command.title}」，有消息就告诉你",
+                    cardTitle = "委托任务已创建",
+                    cardBody = "${task.title}\n巡查间隔：每${humanInterval(task.intervalMinutes)}",
+                )
+            }
+            is com.lingxi.data.delegation.DelegationArgs.Command.List -> {
+                val tasks = delegation.activeTasks()
+                if (tasks.isEmpty()) {
+                    ActionResult.ok("现在没有进行中的委托任务", cardTitle = "委托任务", cardBody = "（无进行中的任务）")
+                } else {
+                    val lines = tasks.mapIndexed { i, t ->
+                        val detail = when (t.kind) {
+                            com.lingxi.data.delegation.TaskKind.REMINDER ->
+                                "提醒 " + com.lingxi.data.delegation.TaskTime.formatAt(t.triggerAt, java.time.ZoneId.systemDefault())
+                            else -> "每${humanInterval(t.intervalMinutes)}巡查"
+                        }
+                        "${i + 1}. ${t.title}（$detail）"
+                    }
+                    ActionResult.ok(
+                        "有 ${tasks.size} 个进行中的委托：" + lines.joinToString("；"),
+                        cardTitle = "委托任务（${tasks.size} 个进行中）",
+                        cardBody = lines.joinToString("\n"),
+                    )
+                }
+            }
+            is com.lingxi.data.delegation.DelegationArgs.Command.Cancel ->
+                mutate(command.id, command.title, "取消") { delegation.cancel(it) }
+            is com.lingxi.data.delegation.DelegationArgs.Command.Pause ->
+                mutate(command.id, command.title, "暂停") { delegation.pause(it) }
+            is com.lingxi.data.delegation.DelegationArgs.Command.Resume ->
+                mutate(command.id, command.title, "恢复") { delegation.resume(it) }
+        }
+    }
+
+    private suspend fun mutate(
+        id: Long?,
+        title: String,
+        verb: String,
+        action: suspend (Long) -> Boolean,
+    ): ActionResult {
+        val task = id?.let { delegation.byId(it) } ?: delegation.findActiveByTitle(title)
+            ?: return ActionResult.error("找不到任务：${title.ifBlank { "#$id" }}")
+        val ok = action(task.id)
+        return if (ok) {
+            ActionResult.ok("已$verb「${task.title}」", cardTitle = "委托任务已$verb", cardBody = task.title)
+        } else {
+            ActionResult.error("$verb 失败")
+        }
+    }
+
+    private fun humanInterval(minutes: Int): String = when {
+        minutes % (24 * 60) == 0 -> "${minutes / (24 * 60)}天"
+        minutes % 60 == 0 -> "${minutes / 60}小时"
+        else -> "$minutes 分钟"
     }
 
     private fun setAlarm(argsJson: String): ActionResult {

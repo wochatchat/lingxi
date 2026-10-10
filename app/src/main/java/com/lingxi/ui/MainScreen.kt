@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -66,6 +67,7 @@ import com.lingxi.data.UiAction
 fun MainScreen(
     onOpenProviders: () -> Unit = {},
     onOpenGeneral: () -> Unit = {},
+    onOpenDelegations: () -> Unit = {},
     vm: ConversationViewModel = hiltViewModel(),
 ) {
     val ui by vm.ui.collectAsState()
@@ -77,6 +79,9 @@ fun MainScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
+                    IconButton(onClick = onOpenDelegations) {
+                        Icon(Icons.Filled.TaskAlt, contentDescription = "委托任务")
+                    }
                     IconButton(onClick = onOpenGeneral) {
                         Icon(Icons.Filled.Tune, contentDescription = "通用设置")
                     }

@@ -83,6 +83,24 @@ object ToolDefs {
                 }
             """.trimIndent(),
         ),
+        ToolSpec(
+            name = "manage_task",
+            description = "管理委托任务（后台跟踪）：创建一次性提醒、创建周期巡查任务、查询/暂停/恢复/取消任务。「盯着 XX 到了告诉我」「每天下午 3 点提醒我打坐」「查一下我的委托任务」等场景使用。",
+            parametersJson = """
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": { "type": "string", "enum": ["create", "list", "cancel", "pause", "resume"], "description": "操作类型" },
+                    "kind": { "type": "string", "enum": ["reminder", "poll"], "description": "create 时：reminder=一次性到点提醒，poll=周期巡查（如盯快递、每天提醒）" },
+                    "title": { "type": "string", "description": "任务标题，如「盯 XX 快递签收」「打坐」" },
+                    "when_text": { "type": "string", "description": "reminder 的时间描述，如「明天 8:30」「2小时后」；poll 的「每天 15 点」也可放这里" },
+                    "interval_minutes": { "type": "integer", "description": "poll 的巡查间隔分钟数（最小 15），如每小时=60" },
+                    "id": { "type": "integer", "description": "cancel/pause/resume 时：任务 id（list 可见）；无 id 时按 title 模糊匹配" }
+                  },
+                  "required": ["action"]
+                }
+            """.trimIndent(),
+        ),
     )
 
     fun byName(name: String): ToolSpec? = ALL.find { it.name == name }

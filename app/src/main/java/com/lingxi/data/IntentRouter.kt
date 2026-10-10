@@ -58,6 +58,10 @@ object IntentRouter {
         val t = text.trim()
         val tNoPunct = t.replace(Regex("""[？?。.!！]"""), "").trim()
 
+        // F13 委托任务意图优先于 set_alarm：周期性提醒/后台跟踪交 LLM tools（manage_task）
+        val delegateHint = Regex("""每(天|日|周|小时)|盯|跟踪|到货|签收|到了告诉我|快递|航班|监控""")
+        if (delegateHint.containsMatchIn(tNoPunct)) return Route.ToolsLlm
+
         // 设闹钟/提醒：祈使句开头（设/定/来/加/响/上/叫我/提醒…）且句中含闹钟|闹铃|提醒
         val imperative = Regex("""^(请|帮我|麻烦|麻烦你)?(设|定|来|加|上|响|提醒|叫我)""")
         val alarmNoun = Regex("""闹钟|闹铃|提醒""")

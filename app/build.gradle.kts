@@ -127,6 +127,11 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
+    // R7 主动服务：WorkManager（F13 委托任务 / F11 晨报 / F12 日程提醒）
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
     // Networking — R1 多 Provider LLM 客户端基础
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)

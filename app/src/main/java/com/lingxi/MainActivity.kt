@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { LOADING, ONBOARD, HOME, PROVIDERS, GENERAL, MEMORY }
+private enum class Screen { LOADING, ONBOARD, HOME, PROVIDERS, GENERAL, MEMORY, DELEGATIONS }
 
 /** 根路由：F15 首启（未完成引导）先进引导屏，完成后进主页 */
 @Composable
@@ -62,12 +62,14 @@ private fun RootRoute(settings: SettingsRepository) {
         Screen.HOME -> MainScreen(
             onOpenProviders = { screen = Screen.PROVIDERS },
             onOpenGeneral = { screen = Screen.GENERAL },
+            onOpenDelegations = { screen = Screen.DELEGATIONS },
         )
         Screen.PROVIDERS -> ProviderSettingsScreen(onBack = { screen = Screen.HOME })
         Screen.GENERAL -> GeneralSettingsScreen(
             onBack = { screen = Screen.HOME },
             onOpenMemory = { screen = Screen.MEMORY },
         )
+        Screen.DELEGATIONS -> com.lingxi.ui.delegation.DelegationScreen(onBack = { screen = Screen.HOME })
         Screen.MEMORY -> MemoryScreen(onBack = { screen = Screen.HOME })
     }
 }
