@@ -14,7 +14,7 @@ class ExpressTrackingTest {
 
     @Test
     fun extract_pureDigits() {
-        assertEquals("1234567890123", ExpressTracking.extractTrackingNo("盯着这个快递 1234567890 到了告诉我"))
+        assertEquals("1234567890", ExpressTracking.extractTrackingNo("盯着这个快递 1234567890 到了告诉我"))
     }
 
     @Test
