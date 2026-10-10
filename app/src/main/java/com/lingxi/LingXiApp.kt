@@ -24,6 +24,7 @@ class LingXiApp : Application() {
     @Inject lateinit var settings: SettingsRepository
     @Inject lateinit var delegation: DelegationRepository
     @Inject lateinit var engine: ConversationEngine
+    @Inject lateinit var tts: com.lingxi.data.TtsEngine
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

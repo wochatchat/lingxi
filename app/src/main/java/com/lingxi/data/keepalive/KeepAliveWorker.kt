@@ -27,7 +27,7 @@ class KeepAliveWorker(appContext: Context, params: WorkerParameters) :
     CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        val entry = applicationContext.entry()
+        val entry = entry()
         val settings = entry.settings()
         val wantService = settings.capsuleEnabled.first() || settings.alwaysListenEnabled.first()
         val alive = FloatingCapsuleService.isRunning
