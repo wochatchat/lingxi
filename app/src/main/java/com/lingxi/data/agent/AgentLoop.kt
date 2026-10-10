@@ -62,15 +62,15 @@ class AgentLoop(
         while (step < cfg.maxSteps) {
             step++
             val messages = buildStepMessages(cfg.systemPrompt, cfg.task, log)
-            val call = callOnce(cfg, messages, cfg.tools).getOrElse { err ->
-                return AgentOutcome(null, step, log.toList(), error = err)
+            val (text0, toolCalls0) = callOnce(cfg, messages, cfg.tools).getOrElse { err ->
+                return AgentOutcome(null, step, log.toList(), error = err.message)
             }
-            if (call.toolCalls.isEmpty()) {
-                val text = call.text.trim()
+            if (toolCalls0.isEmpty()) {
+                val text = text0.trim()
                 if (text.isNotEmpty()) return AgentOutcome(text, step, log.toList())
                 continue // 空响应：再给一次机会
             }
-            for (tc in call.toolCalls) {
+            for (tc in toolCalls0) {
                 val result = runCatching { runTool(tc.name, tc.argsJson) }.getOrElse {
                     AgentToolResult(false, "执行异常: ${it.message ?: it.javaClass.simpleName}")
                 }
@@ -79,10 +79,10 @@ class AgentLoop(
         }
         // 自检总结：步数用尽，强制收敛（不带工具，防继续打转）
         val finalMessages = buildStepMessages(cfg.systemPrompt, cfg.task, log, forceSummary = true)
-        val final = callOnce(cfg, finalMessages, tools = null).getOrElse { err ->
-            return AgentOutcome(null, step, log.toList(), error = err)
+        val (finalText, _) = callOnce(cfg, finalMessages, tools = null).getOrElse { err ->
+            return AgentOutcome(null, step, log.toList(), error = err.message)
         }
-        return AgentOutcome(final.text.trim().ifBlank { null }, step, log.toList())
+        return AgentOutcome(finalText.trim().ifBlank { null }, step, log.toList())
     }
 
     /** 单步 LLM 调用：聚合增量文本与全部 tool_call */
