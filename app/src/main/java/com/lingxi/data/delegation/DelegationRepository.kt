@@ -35,8 +35,13 @@ class DelegationRepository @Inject constructor(
 
     suspend fun activeTasks(): List<DelegationTaskEntity> = dao.activeTasks()
 
-    /** 创建一次性提醒任务并调度 */
-    suspend fun createReminder(title: String, triggerAt: Long): DelegationTaskEntity {
+    /** 创建一次性提醒任务并调度（taskType/paramsJson：R9 真实检查器用） */
+    suspend fun createReminder(
+        title: String,
+        triggerAt: Long,
+        taskType: String = TaskType.GENERIC,
+        paramsJson: String = "{}",
+    ): DelegationTaskEntity {
         val now = System.currentTimeMillis()
         val task = DelegationTaskEntity(
             title = title,
@@ -44,6 +49,8 @@ class DelegationRepository @Inject constructor(
             status = TaskStatus.ACTIVE,
             triggerAt = triggerAt,
             lastResult = "",
+            taskType = taskType,
+            paramsJson = paramsJson,
             createdAt = now,
             updatedAt = now,
         )
@@ -52,8 +59,13 @@ class DelegationRepository @Inject constructor(
         return task.copy(id = id)
     }
 
-    /** 创建周期巡查任务并调度 */
-    suspend fun createPoll(title: String, intervalMinutes: Int): DelegationTaskEntity {
+    /** 创建周期巡查任务并调度（taskType/paramsJson：R9 真实检查器用） */
+    suspend fun createPoll(
+        title: String,
+        intervalMinutes: Int,
+        taskType: String = TaskType.GENERIC,
+        paramsJson: String = "{}",
+    ): DelegationTaskEntity {
         val now = System.currentTimeMillis()
         val interval = intervalMinutes.coerceAtLeast(15)
         val task = DelegationTaskEntity(
@@ -62,12 +74,23 @@ class DelegationRepository @Inject constructor(
             status = TaskStatus.ACTIVE,
             intervalMinutes = interval,
             lastResult = "",
+            taskType = taskType,
+            paramsJson = paramsJson,
             createdAt = now,
             updatedAt = now,
         )
         val id = dao.insert(task)
         schedulePoll(id, interval)
         return task.copy(id = id)
+    }
+
+    /** R9 ParamPanel：调整巡查间隔并重排 worker */
+    suspend fun updateInterval(id: Long, intervalMinutes: Int): Boolean {
+        val task = dao.byId(id) ?: return false
+        val interval = intervalMinutes.coerceAtLeast(15)
+        dao.updateInterval(id, interval, System.currentTimeMillis())
+        schedulePoll(id, interval)
+        return true
     }
 
     suspend fun pause(id: Long): Boolean {
@@ -176,11 +199,11 @@ class DelegationRepository @Inject constructor(
  * 返回非空字符串表示「任务有了新结果」→ 标记 DONE 并通知；null 表示暂无更新。
  */
 interface TaskChecker {
-    suspend fun check(task: DelegationTaskEntity): String?
+    suspend fun check(task: DelegationTaskEntity): TaskUpdate?
 }
 
 /** v1 默认检查器：无真实事件源，永远返回 null（仅巡查打卡） */
 @javax.inject.Singleton
 class DefaultTaskChecker @Inject constructor() : TaskChecker {
-    override suspend fun check(task: DelegationTaskEntity): String? = null
+    override suspend fun check(task: DelegationTaskEntity): TaskUpdate? = null
 }

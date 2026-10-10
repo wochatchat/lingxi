@@ -142,4 +142,7 @@ class ConversationViewModel @Inject constructor(
 
     /** Stream-UI 应答（ConfirmGate 确认/取消） */
     fun onUiConfirm(confirmed: Boolean) = engine.onUiConfirm(confirmed)
+
+    /** Stream-UI 应答（R9 ParamPanel 表单提交 {"key":"value"}） */
+    fun onUiParams(json: String) = engine.onUiParams(json)
 }

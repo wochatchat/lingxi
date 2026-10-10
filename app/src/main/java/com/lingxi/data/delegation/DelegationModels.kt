@@ -16,6 +16,42 @@ object TaskKind {
     const val POLL = "POLL"
 }
 
+/**
+ * 委托任务检查器类型（R9 F13 真实检查器路由用）：
+ * GENERIC 走默认占位检查器；EXPRESS 快递跟踪（快递100）。
+ */
+object TaskType {
+    const val GENERIC = "GENERIC"
+    const val EXPRESS = "EXPRESS"
+}
+
+/**
+ * paramsJson 的解析视图（纯函数，可单测）。
+ * EXPRESS：{"tracking_no":"SF1234567890","company":"shunfeng"}
+ */
+object TaskParams {
+
+    fun trackingNo(json: String): String =
+        runCatching {
+            kotlinx.serialization.json.Json.parseToJsonElement(json)
+                .let { it as? kotlinx.serialization.json.JsonObject }
+                ?.get("tracking_no")
+                ?.let { it as? kotlinx.serialization.json.JsonPrimitive }
+                ?.content
+        }.getOrNull().orEmpty()
+
+    fun company(json: String): String =
+        runCatching {
+            (kotlinx.serialization.json.Json.parseToJsonElement(json) as? kotlinx.serialization.json.JsonObject)
+                ?.get("company")
+                ?.let { it as? kotlinx.serialization.json.JsonPrimitive }
+                ?.content
+        }.getOrNull().orEmpty()
+
+    fun encodeExpress(trackingNo: String, company: String): String =
+        """{"tracking_no":"$trackingNo","company":"$company"}"""
+}
+
 /** 委托任务状态 */
 object TaskStatus {
     const val ACTIVE = "ACTIVE"
@@ -42,6 +78,10 @@ data class DelegationTaskEntity(
     val intervalMinutes: Int = 0,
     /** 最近一次触发/巡查结果（卡片存档） */
     val lastResult: String = "",
+    /** TaskType.GENERIC / EXPRESS（R9 真实检查器路由） */
+    val taskType: String = TaskType.GENERIC,
+    /** 检查器参数 JSON（EXPRESS：tracking_no/company） */
+    val paramsJson: String = "{}",
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -76,6 +116,11 @@ interface DelegationDao {
         "UPDATE delegation_tasks SET lastResult = :lastResult, updatedAt = :updatedAt WHERE id = :id",
     )
     suspend fun updateResult(id: Long, lastResult: String, updatedAt: Long)
+
+    @androidx.room.Query(
+        "UPDATE delegation_tasks SET intervalMinutes = :intervalMinutes, updatedAt = :updatedAt WHERE id = :id",
+    )
+    suspend fun updateInterval(id: Long, intervalMinutes: Int, updatedAt: Long)
 
     @androidx.room.Query("SELECT COUNT(*) FROM delegation_tasks WHERE status = 'ACTIVE'")
     fun observeActiveCount(): kotlinx.coroutines.flow.Flow<Int>

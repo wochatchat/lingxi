@@ -141,4 +141,22 @@ class SettingsRepository @javax.inject.Inject constructor(
     suspend fun setUiAssistEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[uiAssistEnabledKey] = enabled }
     }
+
+    // R9 F13 快递查询（快递100 customer + key，设置页配置；未配置 → 快递委托回落占位巡查）
+    private val expressCustomerKey = stringPreferencesKey("express_query_customer")
+    private val expressKeyKey = stringPreferencesKey("express_query_key")
+
+    val expressCustomer: Flow<String> =
+        context.settingsDataStore.data.map { it[expressCustomerKey] ?: "" }
+
+    val expressKey: Flow<String> =
+        context.settingsDataStore.data.map { it[expressKeyKey] ?: "" }
+
+    suspend fun setExpressCustomer(value: String) {
+        context.settingsDataStore.edit { it[expressCustomerKey] = value.trim() }
+    }
+
+    suspend fun setExpressKey(value: String) {
+        context.settingsDataStore.edit { it[expressKeyKey] = value.trim() }
+    }
 }

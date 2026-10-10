@@ -46,6 +46,35 @@ class DelegationArgsTest {
         assertEquals(15, cmd.intervalMinutes)
     }
 
+    // ---- R9 F13：快递参数 ----
+
+    @Test
+    fun `poll 显式 tracking_no 走快递`() {
+        val r = parse(
+            "action" to "create", "kind" to "poll",
+            "title" to "盯快递", "interval_minutes" to "60",
+            "tracking_no" to "SF1234567890", "company" to "shunfeng",
+        )
+        val cmd = (r as DelegationArgs.Result.Ok).command as DelegationArgs.Command.CreatePoll
+        assertEquals("SF1234567890", cmd.trackingNo)
+        assertEquals("shunfeng", cmd.company)
+    }
+
+    @Test
+    fun `poll 标题带单号自动识别快递`() {
+        val r = parse("action" to "create", "title" to "盯着顺丰快递 1234567890123 到了告诉我", "when_text" to "每小时")
+        val cmd = (r as DelegationArgs.Result.Ok).command as DelegationArgs.Command.CreatePoll
+        assertEquals("1234567890123", cmd.trackingNo)
+        assertEquals("shunfeng", cmd.company)
+    }
+
+    @Test
+    fun `普通 poll 无单号`() {
+        val r = parse("action" to "create", "title" to "盯群里消息", "interval_minutes" to "30")
+        val cmd = (r as DelegationArgs.Result.Ok).command as DelegationArgs.Command.CreatePoll
+        assertTrue(cmd.trackingNo.isBlank())
+    }
+
     @Test
     fun `reminder 缺时间报错`() {
         val r = parse("action" to "create", "kind" to "reminder", "title" to "取快递")

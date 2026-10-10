@@ -251,13 +251,20 @@ class ConversationEngine @javax.inject.Inject constructor(
     fun onUiChoice(index: Int) { pendingAnswer?.complete(index.toString()) }
     fun onUiConfirm(confirmed: Boolean) { pendingAnswer?.complete(if (confirmed) CONFIRMED else CANCELLED) }
 
+    /** ParamPanel 表单应答（UI 层提交 {"key":"value"} JSON） */
+    fun onUiParams(json: String) { pendingAnswer?.complete(json) }
+
     /** 把用户语音/文本解析为对 pendingUi 的应答；不是应答则返回 null（当普通输入处理） */
     private fun resolvePendingFromText(text: String): String? {
         val pending = pendingUi.value ?: return null
         return when (pending.type) {
             UiAction.UiType.ChoiceSheet -> UiAction.parseVoiceChoice(text)?.toString()
             UiAction.UiType.ConfirmGate -> UiAction.parseConfirm(text)?.let { if (it) "1" else "0" }
+            // ParamPanel：语音通道只支持"确认=默认参数 / 取消"；改参数走表单（onUiParams）
+            UiAction.UiType.ParamPanel -> UiAction.parseConfirm(text)?.let { if (it) "1" else "0" }
+            UiAction.UiType.TakeoverPrompt -> UiAction.parseConfirm(text)?.let { if (it) "1" else "0" }
             UiAction.UiType.InfoCard -> null
+            UiAction.UiType.ProgressBar, UiAction.UiType.MiniChart -> null
         }
     }
 
@@ -370,6 +377,38 @@ class ConversationEngine @javax.inject.Inject constructor(
                 else "好的，先不做" to action.copy(resolvedText = "已取消")
             }
             UiAction.UiType.InfoCard -> "" to action
+            // R9 ParamPanel：表单应答（onUiParams 提交 JSON）或语音"确认"=默认参数
+            UiAction.UiType.ParamPanel -> {
+                tts.enqueue(stripMarkdownForSpeech("请确认参数，可以点卡片修改，或说${action.confirmLabel}。"))
+                val answer = askUser(action) ?: return "超时了，先按默认参数" to action.copy(resolvedText = "超时未确认")
+                when (answer) {
+                    "0", CANCELLED -> "好的，先不按这套参数" to action.copy(resolvedText = "已取消")
+                    "1", CONFIRMED -> "好的，按默认参数来" to action.copy(
+                        resolvedText = UiAction.paramSummary(action, emptyMap()),
+                    )
+                    else -> {
+                        // 表单提交的 JSON：{"key":"value"} → 摘要进卡片
+                        val answers = runCatching {
+                            val obj = Json.parseToJsonElement(answer).jsonObject
+                            obj.mapNotNull { (k, v) ->
+                                (v as? JsonPrimitive)?.contentOrNull?.let { k to it }
+                            }.toMap()
+                        }.getOrDefault(emptyMap())
+                        "好的，参数已确认" to action.copy(
+                            resolvedText = UiAction.paramSummary(action, answers).ifBlank { "参数已确认" },
+                        )
+                    }
+                }
+            }
+            // R9 TakeoverPrompt：限时接管，超时自动降级为草稿（不执行）
+            UiAction.UiType.TakeoverPrompt -> {
+                tts.enqueue(stripMarkdownForSpeech(UiAction.confirmVoicePrompt(action)))
+                val answer = askUser(action)
+                    ?: return "时间到了，这条先存为草稿，没有执行" to action.copy(resolvedText = "超时转草稿")
+                if (answer == "1") "好的，已照你说的发" to action.copy(resolvedText = "已确认发送")
+                else "好的，先存成草稿" to action.copy(resolvedText = "转为草稿")
+            }
+            UiAction.UiType.ProgressBar, UiAction.UiType.MiniChart -> "" to action
         }
     }
 
@@ -452,6 +491,10 @@ class ConversationEngine @javax.inject.Inject constructor(
             val type = when (obj["type"]?.jsonPrimitive?.contentOrNull) {
                 "ChoiceSheet" -> UiAction.UiType.ChoiceSheet
                 "ConfirmGate" -> UiAction.UiType.ConfirmGate
+                "ParamPanel" -> UiAction.UiType.ParamPanel
+                "ProgressBar" -> UiAction.UiType.ProgressBar
+                "MiniChart" -> UiAction.UiType.MiniChart
+                "TakeoverPrompt" -> UiAction.UiType.TakeoverPrompt
                 else -> UiAction.UiType.InfoCard
             }
             UiAction(
@@ -464,6 +507,21 @@ class ConversationEngine @javax.inject.Inject constructor(
                 confirmLabel = obj["confirm_label"]?.jsonPrimitive?.contentOrNull ?: "确认",
                 cancelLabel = obj["cancel_label"]?.jsonPrimitive?.contentOrNull ?: "取消",
                 ttlMs = obj["ttl_ms"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 60_000L,
+                fields = (obj["fields"] as? JsonArray)?.mapNotNull { f ->
+                    (f as? JsonObject)?.let { o ->
+                        UiAction.ParamField(
+                            key = o["key"]?.jsonPrimitive?.contentOrNull ?: return@let null,
+                            label = o["label"]?.jsonPrimitive?.contentOrNull ?: o["key"]?.jsonPrimitive?.contentOrNull
+                                ?: return@let null,
+                            value = o["value"]?.jsonPrimitive?.contentOrNull ?: "",
+                            hint = o["hint"]?.jsonPrimitive?.contentOrNull ?: "",
+                        )
+                    }
+                }.orEmpty(),
+                progress = obj["progress"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: -1,
+                values = (obj["values"] as? JsonArray)
+                    ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toFloatOrNull() }
+                    .orEmpty(),
             )
         }.getOrNull()
     }

@@ -11,7 +11,7 @@ import com.lingxi.data.delegation.DelegationDao
         ProfileEntryEntity::class,
         com.lingxi.data.delegation.DelegationTaskEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class MemoryDb : RoomDatabase() {
@@ -34,5 +34,13 @@ val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
                 "`createdAt` INTEGER NOT NULL, " +
                 "`updatedAt` INTEGER NOT NULL)",
         )
+    }
+}
+
+/** v2 → v3：委托任务表加检查器字段（R9 F13 真实检查器：taskType/paramsJson） */
+val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `delegation_tasks` ADD COLUMN `taskType` TEXT NOT NULL DEFAULT 'GENERIC'")
+        db.execSQL("ALTER TABLE `delegation_tasks` ADD COLUMN `paramsJson` TEXT NOT NULL DEFAULT '{}'")
     }
 }

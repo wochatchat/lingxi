@@ -107,11 +107,21 @@ class AndroidActionExecutor @Inject constructor(
                 )
             }
             is com.lingxi.data.delegation.DelegationArgs.Command.CreatePoll -> {
-                val task = delegation.createPoll(command.title, command.intervalMinutes)
+                val isExpress = command.trackingNo.isNotBlank()
+                val task = delegation.createPoll(
+                    command.title,
+                    command.intervalMinutes,
+                    taskType = if (isExpress) com.lingxi.data.delegation.TaskType.EXPRESS
+                    else com.lingxi.data.delegation.TaskType.GENERIC,
+                    paramsJson = if (isExpress) {
+                        com.lingxi.data.delegation.TaskParams.encodeExpress(command.trackingNo, command.company)
+                    } else "{}",
+                )
+                val typeLine = if (isExpress) "\n快递单号：${command.trackingNo}" else ""
                 ActionResult.ok(
                     "收到，我会每${humanInterval(task.intervalMinutes)}盯一次「${command.title}」，有消息就告诉你",
                     cardTitle = "委托任务已创建",
-                    cardBody = "${task.title}\n巡查间隔：每${humanInterval(task.intervalMinutes)}",
+                    cardBody = "${task.title}\n巡查间隔：每${humanInterval(task.intervalMinutes)}$typeLine",
                 )
             }
             is com.lingxi.data.delegation.DelegationArgs.Command.List -> {

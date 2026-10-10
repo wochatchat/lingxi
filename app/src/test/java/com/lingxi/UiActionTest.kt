@@ -61,3 +61,52 @@ class UiActionTest {
         assertTrue(p.contains("我到了"))
     }
 }
+
+// ---- R9 Stream-UI 七原语辅助 ----
+
+class UiActionParamsTest {
+
+    private fun panel() = UiAction(
+        type = UiAction.UiType.ParamPanel,
+        title = "盯快递",
+        fields = listOf(
+            UiAction.ParamField("interval_minutes", "多久查一次", "60", "分钟"),
+            UiAction.ParamField("notify_mode", "怎么通知", "通知栏"),
+        ),
+    )
+
+    @Test
+    fun `参数默认 JSON`() {
+        assertEquals(
+            """{"interval_minutes":"60","notify_mode":"通知栏"}""",
+            UiAction.paramDefaultJson(panel()),
+        )
+    }
+
+    @Test
+    fun `参数摘要 - 全默认`() {
+        assertEquals("多久查一次：60；怎么通知：通知栏", UiAction.paramSummary(panel(), emptyMap()))
+    }
+
+    @Test
+    fun `参数摘要 - 部分改值`() {
+        assertEquals(
+            "多久查一次：30；怎么通知：通知栏",
+            UiAction.paramSummary(panel(), mapOf("interval_minutes" to "30")),
+        )
+    }
+
+    @Test
+    fun `confirmVoicePrompt 覆盖 TakeoverPrompt`() {
+        val t = UiAction(type = UiAction.UiType.TakeoverPrompt, title = "代回", body = "这条我来回可以吗", ttlMs = 10_000)
+        assertTrue(UiAction.confirmVoicePrompt(t).contains("可以吗"))
+    }
+
+    @Test
+    fun `迷你图表与进度原语可构造`() {
+        val bar = UiAction(type = UiAction.UiType.ProgressBar, title = "下载", progress = 42)
+        val chart = UiAction(type = UiAction.UiType.MiniChart, title = "趋势", values = listOf(1f, 3f, 2f))
+        assertEquals(42, bar.progress)
+        assertEquals(3, chart.values.size)
+    }
+}

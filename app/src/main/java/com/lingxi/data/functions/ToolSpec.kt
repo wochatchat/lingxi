@@ -71,13 +71,16 @@ object ToolDefs {
                 {
                   "type": "object",
                   "properties": {
-                    "type": { "type": "string", "enum": ["ChoiceSheet", "ConfirmGate", "InfoCard"], "description": "交互类型" },
+                    "type": { "type": "string", "enum": ["ChoiceSheet", "ConfirmGate", "InfoCard", "ParamPanel", "ProgressBar", "MiniChart", "TakeoverPrompt"], "description": "交互类型" },
                     "title": { "type": "string", "description": "卡片/列表标题" },
                     "body": { "type": "string", "description": "补充说明文字（ConfirmGate 的确认问题 / InfoCard 的正文）" },
                     "options": { "type": "array", "items": { "type": "string" }, "description": "ChoiceSheet 选项列表（每个选项一行）" },
+                    "fields": { "type": "array", "description": "ParamPanel 参数字段", "items": { "type": "object", "properties": { "key": { "type": "string" }, "label": { "type": "string", "description": "字段中文名" }, "value": { "type": "string", "description": "默认值" }, "hint": { "type": "string" } }, "required": ["key", "label"] } },
+                    "progress": { "type": "integer", "description": "ProgressBar 进度 0-100，-1 为不确定态" },
+                    "values": { "type": "array", "items": { "type": "number" }, "description": "MiniChart 数值序列" },
                     "confirm_label": { "type": "string", "description": "确认按钮文字，默认为「确认」" },
                     "cancel_label": { "type": "string", "description": "取消按钮文字，默认为「取消」" },
-                    "ttl_ms": { "type": "integer", "description": "超时毫秒数，默认为 60000（60 秒）" }
+                    "ttl_ms": { "type": "integer", "description": "超时毫秒数，默认为 60000（60 秒）；TakeoverPrompt 建议设 10000，超时自动转草稿不执行" }
                   },
                   "required": ["type", "title"]
                 }
@@ -95,6 +98,8 @@ object ToolDefs {
                     "title": { "type": "string", "description": "任务标题，如「盯 XX 快递签收」「打坐」" },
                     "when_text": { "type": "string", "description": "reminder 的时间描述，如「明天 8:30」「2小时后」；poll 的「每天 15 点」也可放这里" },
                     "interval_minutes": { "type": "integer", "description": "poll 的巡查间隔分钟数（最小 15），如每小时=60" },
+                    "tracking_no": { "type": "string", "description": "盯快递时：快递单号（8-15位）。提供后任务会用真实快递跟踪（需在设置里配置快递100 查询凭据）" },
+                    "company": { "type": "string", "description": "盯快递时：快递公司（如 顺丰/中通/ems），可省略自动识别" },
                     "id": { "type": "integer", "description": "cancel/pause/resume 时：任务 id（list 可见）；无 id 时按 title 模糊匹配" }
                   },
                   "required": ["action"]

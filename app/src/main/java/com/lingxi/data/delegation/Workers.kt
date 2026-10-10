@@ -76,16 +76,27 @@ class PollWorker(appContext: Context, params: WorkerParameters) :
         if (task.status != TaskStatus.ACTIVE) return Result.success()
 
         val update = runCatching { entry.checker().check(task) }.getOrNull()
-        return if (update != null) {
-            entry.delegation().complete(id, update)
-            entry.notifier().post("委托有结果：${task.title}", update)
-            Result.success()
-        } else {
-            entry.delegation().appendResult(
-                id,
-                "已巡查 ${TaskTime.formatAt(System.currentTimeMillis(), java.time.ZoneId.systemDefault())}，暂无更新",
-            )
-            Result.success()
+        return when (update) {
+            null -> {
+                entry.delegation().appendResult(
+                    id,
+                    "已巡查 ${TaskTime.formatAt(System.currentTimeMillis(), java.time.ZoneId.systemDefault())}，暂无更新",
+                )
+                Result.success()
+            }
+            is TaskUpdate.Final -> {
+                entry.delegation().complete(id, update.text)
+                entry.notifier().post("委托有结果：${task.title}", update.text)
+                Result.success()
+            }
+            is TaskUpdate.Progress -> {
+                entry.delegation().appendResult(id, update.text)
+                // 有变化才打扰（CheckRouter 已做去重，这里双保险）
+                if (update.text != task.lastResult) {
+                    entry.notifier().post("委托有进展：${task.title}", update.text)
+                }
+                Result.success()
+            }
         }
     }
 }

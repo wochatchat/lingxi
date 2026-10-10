@@ -24,7 +24,7 @@ object DatabaseModule {
     @Singleton
     fun provideMemoryDb(@ApplicationContext context: Context): MemoryDb =
         Room.databaseBuilder(context, MemoryDb::class.java, "lingxi_memory.db")
-            .addMigrations(com.lingxi.data.memory.MIGRATION_1_2)
+            .addMigrations(com.lingxi.data.memory.MIGRATION_1_2, com.lingxi.data.memory.MIGRATION_2_3)
             .build()
 
     @Provides
@@ -43,12 +43,12 @@ abstract class MemoryModule {
     abstract fun bindMemoryStore(impl: MemoryRepository): MemoryStore
 }
 
-/** F13 委托任务检查器绑定（v1 默认无真实事件源，R8+ 替换实现） */
+/** F13 委托任务检查器绑定（R9：CheckerRouter 按任务类型路由，快递走真实事件源） */
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class DelegationModule {
 
     @Binds
     @Singleton
-    abstract fun bindTaskChecker(impl: com.lingxi.data.delegation.DefaultTaskChecker): com.lingxi.data.delegation.TaskChecker
+    abstract fun bindTaskChecker(impl: com.lingxi.data.delegation.CheckerRouter): com.lingxi.data.delegation.TaskChecker
 }

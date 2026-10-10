@@ -9,7 +9,13 @@ object DelegationArgs {
     /** 解析结果命令 */
     sealed interface Command {
         data class CreateReminder(val title: String, val atMillis: Long, val timeHuman: String) : Command
-        data class CreatePoll(val title: String, val intervalMinutes: Int) : Command
+        data class CreatePoll(
+            val title: String,
+            val intervalMinutes: Int,
+            /** R9：快递单号（非空 → EXPRESS 类型任务，真实检查器跟踪） */
+            val trackingNo: String = "",
+            val company: String = "",
+        ) : Command
         data object List : Command
         data class Cancel(val id: Long?, val title: String) : Command
         data class Pause(val id: Long?, val title: String) : Command
@@ -77,7 +83,12 @@ object DelegationArgs {
                 null -> intervalRaw
                 else -> intervalRaw
             }?.coerceAtLeast(15) ?: return Result.Error("巡查任务需要间隔（interval_minutes 或「每小时」）")
-            Result.Ok(Command.CreatePoll(title, interval))
+            // R9 F13：显式 tracking_no 参数，或标题里带单号 → EXPRESS 真实检查器
+            val trackingNo = (args["tracking_no"] ?: "").trim().uppercase()
+                .ifBlank { ExpressTracking.extractTrackingNo(title)?.uppercase().orEmpty() }
+            val company = (args["company"] ?: "").trim().lowercase()
+                .ifBlank { ExpressTracking.guessCompany(title) }
+            Result.Ok(Command.CreatePoll(title, interval, trackingNo, company))
         }
     }
 
