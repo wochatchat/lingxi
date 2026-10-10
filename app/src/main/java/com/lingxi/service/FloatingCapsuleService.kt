@@ -96,6 +96,11 @@ class FloatingCapsuleService : Service() {
 
     @Volatile private var pauseOnScreenOff = false
 
+    // 常听管线状态
+    private var listenJob: Job? = null
+    @Volatile private var pttRecording = false
+    @Volatile private var alwaysListenOn = false
+
     /** F17 息屏全停：息屏暂停常听（省电），亮屏恢复 */
     private val screenStateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {

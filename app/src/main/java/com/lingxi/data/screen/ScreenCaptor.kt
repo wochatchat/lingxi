@@ -33,7 +33,7 @@ class MediaStoreCaptor @Inject constructor(
     @ApplicationContext private val app: Context,
 ) : ScreenCaptor {
 
-    fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(
+    override fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(
         app, Manifest.permission.READ_MEDIA_IMAGES,
     ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
         app, android.Manifest.permission.READ_EXTERNAL_STORAGE,

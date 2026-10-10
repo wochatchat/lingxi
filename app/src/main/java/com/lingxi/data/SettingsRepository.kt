@@ -120,7 +120,7 @@ class SettingsRepository @javax.inject.Inject constructor(
 
     /** F17 息屏全停：息屏时暂停常听麦克风 */
     val screenOffStopEnabled: Flow<Boolean> =
-        context.settingsDataStore.data.map { it[screenOffStopEnabledKey] ?: false }
+        context.settingsDataStore.data.map { it[screenOffStopKey] ?: false }
 
     /** F9 UI 代操作总开关（系统无障碍开关之外的软件侧闸门，默认关） */
     val uiAssistEnabled: Flow<Boolean> =
