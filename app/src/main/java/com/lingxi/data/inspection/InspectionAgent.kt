@@ -1,13 +1,16 @@
 package com.lingxi.data.inspection
 
 /**
- * F14 LLM Agent 主动巡检（PRD §3.4：v2 功能，v1 预留接口）。
+ * F14 LLM Agent 主动巡检（PRD §3.4；R12 AgentLoop 落地）。
  *
- * 设计意图：周期性把外部数据源（新闻/邮箱/股价等，v2 接入）交给 LLM 聚合成
- * 「值得打扰用户的变化」，产出一句话摘要；无变化返回 null（不打扰）。
- * v2 接入路径：实现本接口 → WorkerEntryPoint 暴露 → 周期 worker（仿 PollWorker）调用。
+ * 实现：LlmInspectionAgent（data/agent/）——LLM 多步工具循环 + 自检总结。
+ * 触发面：周期巡检（InspectionWorker，默认每日）+ 委托 Final 事件即时触发；
+ * 结果走主动通知 + 对话卡片落史；无值得播报的变化返回 null（不打扰）。
  */
 interface InspectionAgent {
-    /** 执行一次巡检；返回摘要文本，null = 没有值得播报的变化 */
-    suspend fun inspect(): String?
+    /**
+     * 执行一次巡检；返回摘要文本，null = 没有值得播报的变化。
+     * @param reason 触发原因（如「委托 XX 完结」）；null = 例行巡检
+     */
+    suspend fun inspect(reason: String? = null): String?
 }

@@ -26,6 +26,8 @@ interface WorkerEntryPoint {
     fun calendar(): CalendarReader
     fun composer(): MorningReportComposer
     fun checker(): TaskChecker
+    /** R12 F14：巡检 agent（LlmInspectionAgent 绑定） */
+    fun inspection(): com.lingxi.data.inspection.InspectionAgent
 }
 
 /** worker 内取依赖入口的小工具 */
@@ -86,6 +88,13 @@ class PollWorker(appContext: Context, params: WorkerParameters) :
             }
             is TaskUpdate.Final -> {
                 entry.delegation().complete(id, update.text)
+                // R12 F14：委托完结即时触发一次巡检（总开关开启时）
+                val inspectionOn = runCatching { entry.settings().inspectionEnabled.first() }.getOrDefault(false)
+                if (inspectionOn) {
+                    entry.delegation().scheduleInspectionOnce(
+                        "委托「${task.title}」刚完结（${update.text.take(60)}），请评估是否有需要提醒用户跟进的事项",
+                    )
+                }
                 // R10：快递到驿站/快递柜完结 → 通知里追问取件码（用户回复后我帮他记住）
                 if (update.followup == Followup.PICKUP_CODE) {
                     entry.notifier().post(
@@ -161,5 +170,28 @@ class CalendarReminderWorker(appContext: Context, params: WorkerParameters) :
             entry.calendar().markNotified(event)
         }
         return Result.success()
+    }
+}
+
+/**
+ * R12 F14 巡检 worker：LLM Agent 主动巡检。
+ * 两个入口：周期巡检（开关 + 间隔由 App 层按设置排定）；委托完结即时触发（KEY_REASON 带 reason）。
+ * 总开关关闭时一律静默跳过（含完结触发，避免用户关了巡检仍被 LLM 调用打扰）。
+ */
+class InspectionWorker(appContext: Context, params: WorkerParameters) :
+    androidx.work.CoroutineWorker(appContext, params) {
+
+    override suspend fun doWork(): Result {
+        val entry = EntryPointAccessors.fromApplication(applicationContext, WorkerEntryPoint::class.java)
+        val enabled = runCatching { entry.settings().inspectionEnabled.first() }.getOrDefault(false)
+        if (!enabled) return Result.success()
+        val reason = inputData.getString(KEY_REASON)
+        runCatching { entry.inspection().inspect(reason) }
+            .onFailure { android.util.Log.w("InspectionWorker", "巡检失败", it) }
+        return Result.success()
+    }
+
+    companion object {
+        const val KEY_REASON = "inspection_reason"
     }
 }

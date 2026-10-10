@@ -179,4 +179,22 @@ class SettingsRepository @javax.inject.Inject constructor(
     suspend fun setAutoStartOnBoot(enabled: Boolean) {
         context.settingsDataStore.edit { it[autoStartOnBootKey] = enabled }
     }
+
+    // R12 F14 Agent 巡检：周期 LLM 巡检开关（默认关）+ 间隔小时数（默认 24，最小 6）
+    private val inspectionEnabledKey = booleanPreferencesKey("inspection_enabled")
+    private val inspectionIntervalHoursKey = intPreferencesKey("inspection_interval_hours")
+
+    val inspectionEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[inspectionEnabledKey] ?: false }
+
+    val inspectionIntervalHours: Flow<Int> =
+        context.settingsDataStore.data.map { it[inspectionIntervalHoursKey] ?: 24 }
+
+    suspend fun setInspectionEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[inspectionEnabledKey] = enabled }
+    }
+
+    suspend fun setInspectionIntervalHours(hours: Int) {
+        context.settingsDataStore.edit { it[inspectionIntervalHoursKey] = hours.coerceAtLeast(6) }
+    }
 }

@@ -75,6 +75,14 @@ class ConversationEngine @javax.inject.Inject constructor(
     fun setOfflineMode(enabled: Boolean) { offlineMode = enabled }
 
     /**
+     * R12 F14：主动巡检结果落史（Worker 线程调用，只动 UI 历史流，
+     * 不碰 messages 滑窗——避免与正在跑的对话回合竞争）。
+     */
+    fun recordProactiveTurn(title: String, summary: String) {
+        _history.value = _history.value + ConvTurn(title, summary)
+    }
+
+    /**
      * 跑一轮对话。挂起直到 LLM 流结束且 TTS 播完。
      * 协程取消（barge-in 前身）时停播并上抛取消。
      */

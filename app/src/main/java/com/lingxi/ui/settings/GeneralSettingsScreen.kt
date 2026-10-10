@@ -58,6 +58,9 @@ data class GeneralUiState(
     val offlineMode: Boolean = false,
     /** R11 开机自启 */
     val autoStartOnBoot: Boolean = true,
+    /** R12 F14 Agent 巡检 */
+    val inspectionEnabled: Boolean = false,
+    val inspectionIntervalHours: Int = 24,
 )
 
 private data class BaseFlags(
@@ -73,6 +76,12 @@ private data class ProactiveConfig(
     val morningCity: String = "",
     val calendarEnabled: Boolean = false,
     val calendarLead: Int = 15,
+)
+
+/** R12 F14：巡检配置（独立 combine 组，避免超 5 流） */
+private data class AgentConfig(
+    val inspectionEnabled: Boolean = false,
+    val inspectionIntervalHours: Int = 24,
 )
 
 @HiltViewModel
@@ -98,7 +107,12 @@ class GeneralSettingsViewModel @Inject constructor(
         ProactiveConfig(on, time, city, cal, lead)
     }
 
-    val state = combine(base, proactive) { b, p ->
+    private val agentCfg = combine(
+        settings.inspectionEnabled,
+        settings.inspectionIntervalHours,
+    ) { on, hours -> AgentConfig(on, hours) }
+
+    val state = combine(base, proactive, agentCfg) { b, p, a ->
         GeneralUiState(
             capsuleEnabled = b.capsule,
             alwaysListenEnabled = b.listen,
@@ -109,6 +123,8 @@ class GeneralSettingsViewModel @Inject constructor(
             calendarLeadMinutes = p.calendarLead,
             offlineMode = b.offline,
             autoStartOnBoot = b.autoStart,
+            inspectionEnabled = a.inspectionEnabled,
+            inspectionIntervalHours = a.inspectionIntervalHours,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), GeneralUiState())
 
@@ -121,6 +137,8 @@ class GeneralSettingsViewModel @Inject constructor(
     fun setMorningReportCity(city: String) = viewModelScope.launch { settings.setMorningReportCity(city) }
     fun setCalendarReminder(enabled: Boolean) = viewModelScope.launch { settings.setCalendarReminderEnabled(enabled) }
     fun setCalendarLeadMinutes(minutes: Int) = viewModelScope.launch { settings.setCalendarLeadMinutes(minutes) }
+    fun setInspectionEnabled(enabled: Boolean) = viewModelScope.launch { settings.setInspectionEnabled(enabled) }
+    fun setInspectionInterval(hours: Int) = viewModelScope.launch { settings.setInspectionIntervalHours(hours) }
 }
 
 /**
@@ -222,6 +240,7 @@ fun GeneralSettingsScreen(
             OfflineModeSection(ui, vm)
             MorningReportSection(ui, vm)
             CalendarReminderSection(ui, vm)
+            InspectionSection(ui, vm)
         }
     }
 }
@@ -278,6 +297,43 @@ private fun MorningReportSection(ui: GeneralUiState, vm: GeneralSettingsViewMode
                 label = { Text("城市（可选，用于天气，如「上海」）") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+/** R12 F14 Agent 周期巡检：开关 + 间隔小时数（最小 6h） */
+@Composable
+private fun InspectionSection(ui: GeneralUiState, vm: GeneralSettingsViewModel) {
+    SwitchRow(
+        title = "主动巡检（实验）",
+        subtitle = "灵犀的 AI 代理定期后台巡检：检查委托任务进展、发现值得知道的变化才通知你；委托完结时也会即时评估一次。消耗少量 AI 调用",
+        checked = ui.inspectionEnabled,
+        onCheckedChange = vm::setInspectionEnabled,
+    )
+    if (ui.inspectionEnabled) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = ui.inspectionIntervalHours.toString(),
+                onValueChange = { raw -> raw.toIntOrNull()?.let { vm.setInspectionInterval(it) } },
+                label = { Text("巡检间隔（小时，最小 6）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+_filterChips(ui, vm)
+        }
+    }
+}
+
+/** 间隔快捷档位（6/12/24/48 小时） */
+@Composable
+private fun _filterChips(ui: GeneralUiState, vm: GeneralSettingsViewModel) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(6, 12, 24, 48).forEach { h ->
+            FilterChip(
+                selected = ui.inspectionIntervalHours == h,
+                onClick = { vm.setInspectionInterval(h) },
+                label = { Text("${h}h") },
             )
         }
     }

@@ -34,4 +34,9 @@ object EngineModule {
     @Provides
     @Singleton
     fun provideScreenCaptor(impl: com.lingxi.data.screen.MediaStoreCaptor): com.lingxi.data.screen.ScreenCaptor = impl
+
+    /** R12 F14：巡检 agent 绑定（WorkerEntryPoint / 后续调用面依赖接口） */
+    @Provides
+    @Singleton
+    fun provideInspectionAgent(impl: com.lingxi.data.agent.LlmInspectionAgent): com.lingxi.data.inspection.InspectionAgent = impl
 }

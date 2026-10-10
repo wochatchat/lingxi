@@ -159,6 +159,27 @@ class DelegationRepository @Inject constructor(
         workManager.cancelUniqueWork(WORK_CALENDAR)
     }
 
+    /** R12 F14 周期巡检：LLM Agent 按配置间隔跑（最小 6 小时，防打扰/控成本） */
+    fun scheduleInspection(intervalHours: Int) {
+        val request = PeriodicWorkRequestBuilder<InspectionWorker>(
+            intervalHours.coerceAtLeast(6).toLong(), TimeUnit.HOURS,
+        ).build()
+        workManager.enqueueUniquePeriodicWork(WORK_INSPECTION, ExistingPeriodicWorkPolicy.UPDATE, request)
+    }
+
+    /** R12 F14：委托完结等即时触发的一次性巡检 */
+    fun scheduleInspectionOnce(reason: String) {
+        val request = OneTimeWorkRequestBuilder<InspectionWorker>()
+            .setInputData(androidx.work.workDataOf(InspectionWorker.KEY_REASON to reason))
+            .build()
+        workManager.enqueueUniqueWork(WORK_INSPECTION_ONCE, ExistingWorkPolicy.REPLACE, request)
+    }
+
+    fun cancelInspection() {
+        workManager.cancelUniqueWork(WORK_INSPECTION)
+        workManager.cancelUniqueWork(WORK_INSPECTION_ONCE)
+    }
+
     private fun scheduleReminder(id: Long, triggerAt: Long) {
         val delay = (triggerAt - System.currentTimeMillis()).coerceAtLeast(0)
         val request = OneTimeWorkRequestBuilder<ReminderWorker>()
@@ -191,5 +212,7 @@ class DelegationRepository @Inject constructor(
     companion object {
         const val WORK_MORNING_REPORT = "morning_report"
         const val WORK_CALENDAR = "calendar_reminder"
+        const val WORK_INSPECTION = "agent_inspection"
+        const val WORK_INSPECTION_ONCE = "agent_inspection_once"
     }
 }

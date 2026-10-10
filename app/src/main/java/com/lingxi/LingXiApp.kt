@@ -76,6 +76,15 @@ class LingXiApp : Application() {
         appScope.launch {
             settings.offlineModeEnabled.distinctUntilChanged().collect { engine.setOfflineMode(it) }
         }
+        // R12 F14 Agent 周期巡检：随设置启停（间隔最小 6h）
+        appScope.launch {
+            combine(settings.inspectionEnabled, settings.inspectionIntervalHours) { on, hours -> on to hours }
+                .distinctUntilChanged()
+                .collect { (on, hours) ->
+                    if (on) delegation.scheduleInspection(hours)
+                    else delegation.cancelInspection()
+                }
+        }
         // R8 F17 功耗采样：App 进程存活期间记录电量（BATTERY_CHANGED 是粘性广播，进程死掉即停，重启后继续）
         registerReceiver(batteryReceiver, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
         // R11 语音降延迟：启动即预热 TTS 引擎（IO 线程，首次播报省 init 耗时）
