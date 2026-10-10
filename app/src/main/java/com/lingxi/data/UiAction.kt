@@ -112,6 +112,8 @@ data class UiAction(
 
         /** ParamPanel 应答摘要（"间隔：每小时；通知：通知栏"），answers 缺省字段回落默认值 */
         fun paramSummary(action: UiAction, answers: Map<String, String>): String =
-            action.fields.joinToString("；") { f -> "${f.label}：${answers[f.key]?.ifBlank { null } ?: it.value}" }
+            action.fields.joinToString("；") { f ->
+                "${f.label}：${answers[f.key]?.takeIf { v -> v.isNotBlank() } ?: f.value}"
+            }
     }
 }

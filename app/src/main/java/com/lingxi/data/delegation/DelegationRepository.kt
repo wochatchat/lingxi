@@ -193,17 +193,3 @@ class DelegationRepository @Inject constructor(
         const val WORK_CALENDAR = "calendar_reminder"
     }
 }
-
-/**
- * 委托任务检查器扩展点（F13 v1 占位，R8+ 接真实事件源：快递/航班/比价等）。
- * 返回非空字符串表示「任务有了新结果」→ 标记 DONE 并通知；null 表示暂无更新。
- */
-interface TaskChecker {
-    suspend fun check(task: DelegationTaskEntity): TaskUpdate?
-}
-
-/** v1 默认检查器：无真实事件源，永远返回 null（仅巡查打卡） */
-@javax.inject.Singleton
-class DefaultTaskChecker @Inject constructor() : TaskChecker {
-    override suspend fun check(task: DelegationTaskEntity): TaskUpdate? = null
-}
