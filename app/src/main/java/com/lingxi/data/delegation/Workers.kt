@@ -7,7 +7,7 @@ import androidx.work.WorkerParameters
 import com.lingxi.data.Notifier
 import com.lingxi.data.SettingsRepository
 import dagger.assisted.Assisted
-import dagger.assisted.AssistedInject
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import java.time.LocalTime
 import java.time.ZoneId
@@ -17,7 +17,7 @@ import java.time.ZoneId
  */
 @HiltWorker
 class ReminderWorker @AssistedInject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext appContext: Context,
+    @ApplicationContext appContext: Context,
     @Assisted params: WorkerParameters,
     private val repository: DelegationRepository,
     private val notifier: Notifier,
@@ -45,7 +45,7 @@ class ReminderWorker @AssistedInject constructor(
  */
 @HiltWorker
 class PollWorker @AssistedInject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext appContext: Context,
+    @ApplicationContext appContext: Context,
     @Assisted params: WorkerParameters,
     private val repository: DelegationRepository,
     private val checker: TaskChecker,
@@ -79,7 +79,7 @@ class PollWorker @AssistedInject constructor(
  */
 @HiltWorker
 class MorningReportWorker @AssistedInject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext appContext: Context,
+    @ApplicationContext appContext: Context,
     @Assisted params: WorkerParameters,
     private val settings: SettingsRepository,
     private val repository: DelegationRepository,
@@ -121,7 +121,7 @@ class MorningReportWorker @AssistedInject constructor(
  */
 @HiltWorker
 class CalendarReminderWorker @AssistedInject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext appContext: Context,
+    @ApplicationContext appContext: Context,
     @Assisted params: WorkerParameters,
     private val settings: SettingsRepository,
     private val calendar: CalendarReader,
