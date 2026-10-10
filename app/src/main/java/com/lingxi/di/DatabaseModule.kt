@@ -42,3 +42,13 @@ abstract class MemoryModule {
     @Singleton
     abstract fun bindMemoryStore(impl: MemoryRepository): MemoryStore
 }
+
+/** F13 委托任务检查器绑定（v1 默认无真实事件源，R8+ 替换实现） */
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class DelegationModule {
+
+    @Binds
+    @Singleton
+    abstract fun bindTaskChecker(impl: com.lingxi.data.delegation.DefaultTaskChecker): com.lingxi.data.delegation.TaskChecker
+}
