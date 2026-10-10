@@ -20,6 +20,9 @@ object IntentRouter {
 
         /** 闲聊/普通问答，无 tools */
         data object Chat : Route
+
+        /** F10 截屏问答：读取最近截图 + 多模态上行（需确认门） */
+        data object Screenshot : Route
     }
 
     /**
@@ -57,6 +60,10 @@ object IntentRouter {
     fun route(text: String): Route {
         val t = text.trim()
         val tNoPunct = t.replace(Regex("""[？?。.!！]"""), "").trim()
+
+        // F10 截屏问答（优先于其他路由）：「看看屏幕上这个」「截屏看看」等
+        val screenshotHint = Regex("""截屏|截个屏|截图|屏幕上|看看屏幕|看一下屏幕|看下屏幕|读一下屏幕|读屏|当前屏幕""")
+        if (screenshotHint.containsMatchIn(tNoPunct)) return Route.Screenshot
 
         // F13 委托任务意图优先于 set_alarm：周期性提醒/后台跟踪交 LLM tools（manage_task）
         val delegateHint = Regex("""每(天|日|周|小时)|盯|跟踪|到货|签收|到了告诉我|快递|航班|监控""")

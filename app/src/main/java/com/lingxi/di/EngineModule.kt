@@ -30,4 +30,8 @@ object EngineModule {
     @Provides
     @Singleton
     fun provideActionExecutor(impl: AndroidActionExecutor): ActionExecutor = impl
+
+    @Provides
+    @Singleton
+    fun provideScreenCaptor(impl: com.lingxi.data.screen.MediaStoreCaptor): com.lingxi.data.screen.ScreenCaptor = impl
 }

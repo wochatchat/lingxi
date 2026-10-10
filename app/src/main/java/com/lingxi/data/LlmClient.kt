@@ -28,9 +28,17 @@ import java.io.BufferedReader
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-/** 对话消息（OpenAI-compatible role/content） */
+/** 一张随消息上传的图片（F10 多模态，base64） */
 @Serializable
-data class ChatMessage(val role: String, val content: String)
+data class ChatImage(val mime: String, val base64: String)
+
+/** 对话消息（OpenAI-compatible role/content；images 非空时 content 用多模态数组） */
+@Serializable
+data class ChatMessage(
+    val role: String,
+    val content: String,
+    val images: List<ChatImage> = emptyList(),
+)
 
 /** 流式事件：增量文本 / 工具调用 / 正常结束 / 失败（带可定位信息） */
 sealed interface LlmEvent {
@@ -103,6 +111,60 @@ interface LlmStream {
 }
 
 /**
+ * 构建 OpenAI-compatible /chat/completions 请求体（纯函数，可单测）。
+ * images 非空的消息走多模态 content 数组（text + image_url data URL）。
+ */
+fun buildChatBody(
+    model: String,
+    messages: List<ChatMessage>,
+    temperature: Double,
+    tools: List<ToolSpec>?,
+): JsonObject = buildJsonObject {
+    put("model", model)
+    put("messages", JsonArray(messages.map { msg ->
+        if (msg.images.isEmpty()) {
+            buildJsonObject {
+                put("role", msg.role)
+                put("content", msg.content)
+            }
+        } else {
+            buildJsonObject {
+                put("role", msg.role)
+                put("content", JsonArray(buildList {
+                    add(buildJsonObject {
+                        put("type", "text")
+                        put("text", msg.content)
+                    })
+                    for (img in msg.images) {
+                        add(buildJsonObject {
+                            put("type", "image_url")
+                            put("image_url", buildJsonObject {
+                                put("url", "data:${img.mime};base64,${img.base64}")
+                            })
+                        })
+                    }
+                }))
+            }
+        }
+    }))
+    put("stream", true)
+    put("temperature", temperature)
+    // F8 Function Calling tools
+    if (!tools.isNullOrEmpty()) {
+        put("tools", JsonArray(tools.map { spec ->
+            buildJsonObject {
+                put("type", "function")
+                put("function", buildJsonObject {
+                    put("name", spec.name)
+                    put("description", spec.description)
+                    put("parameters", Json.parseToJsonElement(spec.parametersJson))
+                })
+            }
+        }))
+    }
+}
+
+/**
  * OpenAI-compatible 流式对话客户端。
  * 统一抽象：云厂商直连 / 自定义中转站 / Ollama 等本地网关走同一接口（F6/PRD §5）。
  */
@@ -117,30 +179,7 @@ class LlmClient(
         temperature: Double,
         tools: List<ToolSpec>?,
     ): Flow<LlmEvent> = callbackFlow {
-        val body = buildJsonObject {
-            put("model", model)
-            put("messages", JsonArray(messages.map {
-                buildJsonObject {
-                    put("role", it.role)
-                    put("content", it.content)
-                }
-            }))
-            put("stream", true)
-            put("temperature", temperature)
-            // F8 Function Calling tools
-            if (!tools.isNullOrEmpty()) {
-                put("tools", JsonArray(tools.map { spec ->
-                    buildJsonObject {
-                        put("type", "function")
-                        put("function", buildJsonObject {
-                            put("name", spec.name)
-                            put("description", spec.description)
-                            put("parameters", Json.parseToJsonElement(spec.parametersJson))
-                        })
-                    }
-                }))
-            }
-        }.toString()
+        val body = buildChatBody(model, messages, temperature, tools).toString()
 
         val request = Request.Builder()
             .url(chatCompletionsUrl(baseUrl))

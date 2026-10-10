@@ -54,11 +54,14 @@ data class GeneralUiState(
     val morningReportCity: String = "",
     val calendarReminderEnabled: Boolean = false,
     val calendarLeadMinutes: Int = 15,
+    /** F16 全离线模式 */
+    val offlineMode: Boolean = false,
 )
 
 private data class BaseFlags(
     val capsule: Boolean = false,
     val listen: Boolean = false,
+    val offline: Boolean = false,
 )
 
 private data class ProactiveConfig(
@@ -78,7 +81,8 @@ class GeneralSettingsViewModel @Inject constructor(
     private val base = combine(
         settings.capsuleEnabled,
         settings.alwaysListenEnabled,
-    ) { c, l -> BaseFlags(c, l) }
+        settings.offlineModeEnabled,
+    ) { c, l, o -> BaseFlags(c, l, o) }
 
     private val proactive = combine(
         settings.morningReportEnabled,
@@ -99,11 +103,13 @@ class GeneralSettingsViewModel @Inject constructor(
             morningReportCity = p.morningCity,
             calendarReminderEnabled = p.calendarEnabled,
             calendarLeadMinutes = p.calendarLead,
+            offlineMode = b.offline,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), GeneralUiState())
 
     fun setCapsule(enabled: Boolean) = viewModelScope.launch { settings.setCapsuleEnabled(enabled) }
     fun setAlwaysListen(enabled: Boolean) = viewModelScope.launch { settings.setAlwaysListenEnabled(enabled) }
+    fun setOfflineMode(enabled: Boolean) = viewModelScope.launch { settings.setOfflineMode(enabled) }
     fun setMorningReportEnabled(enabled: Boolean) = viewModelScope.launch { settings.setMorningReportEnabled(enabled) }
     fun setMorningReportTime(time: String) = viewModelScope.launch { settings.setMorningReportTime(time) }
     fun setMorningReportCity(city: String) = viewModelScope.launch { settings.setMorningReportCity(city) }
@@ -120,6 +126,8 @@ class GeneralSettingsViewModel @Inject constructor(
 fun GeneralSettingsScreen(
     onBack: () -> Unit,
     onOpenMemory: () -> Unit = {},
+    onOpenPower: () -> Unit = {},
+    onOpenAssist: () -> Unit = {},
     vm: GeneralSettingsViewModel = hiltViewModel(),
 ) {
     val ui by vm.state.collectAsState()
@@ -152,6 +160,16 @@ fun GeneralSettingsScreen(
                 title = "记忆管理",
                 subtitle = "三层记忆：会话滑窗 / 每日摘要 / 长期画像；对话里说「记住…」即可沉淀，可在记忆管理页查看编辑",
                 onClick = onOpenMemory,
+            )
+            EntryRow(
+                title = "功耗面板",
+                subtitle = "电量与 24h 掉电统计；一键降档：息屏全停 / 提高 VAD 阈值",
+                onClick = onOpenPower,
+            )
+            EntryRow(
+                title = "UI 代操作（实验）",
+                subtitle = "无障碍读屏 + 代点屏幕元素；默认关、逐项确认、审计可查",
+                onClick = onOpenAssist,
             )
             SwitchRow(
                 title = "悬浮胶囊",
@@ -188,10 +206,40 @@ fun GeneralSettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            ScreenshotQaSection(vm)
+            OfflineModeSection(ui, vm)
             MorningReportSection(ui, vm)
             CalendarReminderSection(ui, vm)
         }
     }
+}
+
+/** F10 截屏问答：照片权限授权入口（读取相册最近截图做多模态问答） */
+@Composable
+private fun ScreenshotQaSection(vm: GeneralSettingsViewModel) {
+    val context = LocalContext.current
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+        context, android.Manifest.permission.READ_MEDIA_IMAGES,
+    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    EntryRow(
+        title = "截屏问答",
+        subtitle = if (granted) "照片权限已授权。先系统截屏，再对我说「看看屏幕上这个」" else "需要照片权限读取最近截图；上传分析前会先向你确认",
+        onClick = { if (!granted) permLauncher.launch(android.Manifest.permission.READ_MEDIA_IMAGES) },
+    )
+}
+
+/** F16 全离线模式：系统动作仍可用，云端对话停用（端侧模型接入前的占位） */
+@Composable
+private fun OfflineModeSection(ui: GeneralUiState, vm: GeneralSettingsViewModel) {
+    SwitchRow(
+        title = "全离线模式",
+        subtitle = "不联网：设闹钟、开应用、提醒等系统动作照常可用；云端 AI 对话与语音识别停用（端侧模型后续版本接入）",
+        checked = ui.offlineMode,
+        onCheckedChange = vm::setOfflineMode,
+    )
 }
 
 /** F11 晨报：开关 + 时间 + 城市（天气源 Open-Meteo，无需 Key） */

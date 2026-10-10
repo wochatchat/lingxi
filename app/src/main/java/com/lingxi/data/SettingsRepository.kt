@@ -102,4 +102,43 @@ class SettingsRepository @javax.inject.Inject constructor(
     suspend fun setCalendarLeadMinutes(minutes: Int) {
         context.settingsDataStore.edit { it[calendarLeadMinutesKey] = minutes }
     }
+
+    // ---- R8 工程面（F16 全离线 / F17 功耗 / F9 UI 代操作） ----
+
+    private val offlineModeKey = booleanPreferencesKey("offline_mode_enabled")
+    private val vadThresholdKey = intPreferencesKey("vad_threshold_rms")
+    private val screenOffStopKey = booleanPreferencesKey("screen_off_stop_enabled")
+    private val uiAssistEnabledKey = booleanPreferencesKey("ui_assist_enabled")
+
+    /** F16 全离线模式（默认关）：开启后仅系统动作（闹钟/开App/提醒等）可用，云端对话停用 */
+    val offlineModeEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[offlineModeKey] ?: false }
+
+    /** F17 常听 VAD 能量阈值（RMS，默认 500；调高 = 降灵敏度省电） */
+    val vadThreshold: Flow<Int> =
+        context.settingsDataStore.data.map { it[vadThresholdKey] ?: 500 }
+
+    /** F17 息屏全停：息屏时暂停常听麦克风 */
+    val screenOffStopEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[screenOffStopEnabledKey] ?: false }
+
+    /** F9 UI 代操作总开关（系统无障碍开关之外的软件侧闸门，默认关） */
+    val uiAssistEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[uiAssistEnabledKey] ?: false }
+
+    suspend fun setOfflineMode(enabled: Boolean) {
+        context.settingsDataStore.edit { it[offlineModeKey] = enabled }
+    }
+
+    suspend fun setVadThreshold(threshold: Int) {
+        context.settingsDataStore.edit { it[vadThresholdKey] = threshold }
+    }
+
+    suspend fun setScreenOffStopEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[screenOffStopKey] = enabled }
+    }
+
+    suspend fun setUiAssistEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[uiAssistEnabledKey] = enabled }
+    }
 }

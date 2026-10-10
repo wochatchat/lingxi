@@ -1,7 +1,10 @@
 package com.lingxi
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
 import com.lingxi.data.Notifier
+import com.lingxi.data.ConversationEngine
 import com.lingxi.data.SettingsRepository
 import com.lingxi.data.delegation.DelegationRepository
 import com.lingxi.service.FloatingCapsuleService
@@ -20,6 +23,7 @@ class LingXiApp : Application() {
 
     @Inject lateinit var settings: SettingsRepository
     @Inject lateinit var delegation: DelegationRepository
+    @Inject lateinit var engine: ConversationEngine
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -60,6 +64,27 @@ class LingXiApp : Application() {
                     if (on) delegation.scheduleCalendarReminder()
                     else delegation.cancelCalendarReminder()
                 }
+        }
+        // R8 F16 全离线模式：设置 → 引擎（引擎不直接依赖 DataStore）
+        appScope.launch {
+            settings.offlineModeEnabled.distinctUntilChanged().collect { engine.setOfflineMode(it) }
+        }
+        // R8 F17 功耗采样：App 进程存活期间记录电量（BATTERY_CHANGED 是粘性广播，进程死掉即停，重启后继续）
+        registerReceiver(batteryReceiver, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+    }
+
+    private val batteryReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != Intent.ACTION_BATTERY_CHANGED) return
+            val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+            val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+            if (level < 0) return
+            val status = intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+            val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == android.os.BatteryManager.BATTERY_STATUS_FULL
+            runCatching {
+                com.lingxi.data.power.PowerStore.addSample(context, level * 100 / scale, charging, System.currentTimeMillis())
+            }
         }
     }
 }

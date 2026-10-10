@@ -3,7 +3,7 @@ package com.lingxi
 import com.lingxi.data.IntentRouter
 import com.lingxi.data.IntentRouter.Route
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class IntentRouterTest {
@@ -83,5 +83,22 @@ class IntentRouterTest {
     @Test
     fun `早上上午不加12`() {
         assertEquals(7 to 0, IntentRouter.extractAlarmTime("早上7点"))
+    }
+
+    // ---- R8 F10 截屏意图 ----
+
+    @Test
+    fun `截屏意图路由到 Screenshot`() {
+        assertEquals(IntentRouter.Route.Screenshot, IntentRouter.route("看看屏幕上这个"))
+        assertEquals(IntentRouter.Route.Screenshot, IntentRouter.route("帮我截屏看看"))
+        assertEquals(IntentRouter.Route.Screenshot, IntentRouter.route("屏幕上写了什么？"))
+        assertEquals(IntentRouter.Route.Screenshot, IntentRouter.route("看一下屏幕"))
+        assertEquals(IntentRouter.Route.Screenshot, IntentRouter.route("读一下屏幕上的字"))
+    }
+
+    @Test
+    fun `非截屏话术不走截图路由`() {
+        assertNotEquals(IntentRouter.Route.Screenshot, IntentRouter.route("今天心情不错"))
+        assertNotEquals(IntentRouter.Route.Screenshot, IntentRouter.route("帮我查快递"))
     }
 }

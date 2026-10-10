@@ -49,6 +49,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -93,10 +94,24 @@ class FloatingCapsuleService : Service() {
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 8f, resources.displayMetrics)
     }
 
-    // 常听管线
-    private var listenJob: Job? = null
-    @Volatile private var pttRecording = false
-    @Volatile private var alwaysListenOn = false
+    @Volatile private var pauseOnScreenOff = false
+
+    /** F17 息屏全停：息屏暂停常听（省电），亮屏恢复 */
+    private val screenStateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    if (pauseOnScreenOff && alwaysListenOn) {
+                        listenJob?.cancel()
+                        listenJob = null
+                    }
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    if (alwaysListenOn && listenJob == null) startAlwaysListen()
+                }
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -110,6 +125,14 @@ class FloatingCapsuleService : Service() {
         observeEngineState()
         observeCapsuleToggle()
         observeAlwaysListenToggle()
+        observeScreenOffStop()
+
+        // F17 息屏全停：监听屏幕开关（receiver 常驻本服务生命周期）
+        val screenFilter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        registerReceiver(screenStateReceiver, screenFilter)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -122,6 +145,7 @@ class FloatingCapsuleService : Service() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(screenStateReceiver) }
         removeViews()
         listenJob?.cancel()
         listenJob = null
@@ -165,6 +189,16 @@ class FloatingCapsuleService : Service() {
         }
     }
 
+    /** F17 息屏全停开关 → 停/启常听跟随 */
+    private fun observeScreenOffStop() {
+        scope.launch {
+            settings.screenOffStopEnabled.distinctUntilChanged().collect { enabled ->
+                pauseOnScreenOff = enabled
+                if (!enabled && alwaysListenOn && listenJob == null) startAlwaysListen()
+            }
+        }
+    }
+
     // ---------- 常听管线（连续采集 → 能量 VAD → 语音段 → ASR → 引擎） ----------
 
     /** 挂起条件（回声防护）：PTT 录音中，或引擎处于 识别/思考/出错 态。 */
@@ -175,9 +209,11 @@ class FloatingCapsuleService : Service() {
         if (listenJob != null) return
         if (!micGranted()) return
         listenJob = scope.launch(Dispatchers.IO) {
+            // F17 可调 VAD 阈值（降档省电）：调高阈值 = 更难触发，灵敏度降低
+            val thresholdRms = settings.vadThreshold.first().toDouble().coerceIn(100.0, 5000.0)
             val mic = ContinuousMic()
             if (!mic.start()) { listenJob = null; return@launch }
-            val vad = EnergyVad(VadConfig())
+            val vad = EnergyVad(VadConfig(thresholdRms = thresholdRms))
             val prebuf = ArrayDeque<ByteArray>()       // 语音起点前 600ms 预缓冲
             var collected = mutableListOf<ByteArray>() // 当前语音段
             var speechMs = 0

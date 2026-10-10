@@ -101,6 +101,30 @@ object ToolDefs {
                 }
             """.trimIndent(),
         ),
+        ToolSpec(
+            name = "read_screen",
+            description = "读取当前屏幕上可见的文字内容（无障碍能力，需用户开启）。用于「这个页面写了什么」「帮我看看屏幕」等场景。无参数。",
+            parametersJson = """
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": []
+                }
+            """.trimIndent(),
+        ),
+        ToolSpec(
+            name = "click_ui",
+            description = "点击当前屏幕上包含指定文字的可点击元素（如按钮、链接）。灵犀会在执行前向用户确认。参数 target 为要点击的元素文字。",
+            parametersJson = """
+                {
+                  "type": "object",
+                  "properties": {
+                    "target": { "type": "string", "description": "要点击的元素上的文字，如「同意」「发送」" }
+                  },
+                  "required": ["target"]
+                }
+            """.trimIndent(),
+        ),
     )
 
     fun byName(name: String): ToolSpec? = ALL.find { it.name == name }

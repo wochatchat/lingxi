@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.AlarmClock
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -26,6 +27,7 @@ import javax.inject.Singleton
 class AndroidActionExecutor @Inject constructor(
     @ApplicationContext private val app: Context,
     private val delegation: com.lingxi.data.delegation.DelegationRepository,
+    private val settings: com.lingxi.data.SettingsRepository,
 ) : ActionExecutor {
 
     override suspend fun execute(toolName: String, argsJson: String): ActionResult {
@@ -35,8 +37,53 @@ class AndroidActionExecutor @Inject constructor(
             "web_search" -> webSearch(argsJson)
             "send_sms" -> sendSms(argsJson)
             "manage_task" -> manageTask(argsJson)
+            "read_screen" -> readScreen()
+            "click_ui" -> clickUi(argsJson)
             else -> ActionResult.error("未知工具: $toolName")
         }
+    }
+
+    /** F9 闸门：软件总开关 + 系统无障碍服务都开才可用 */
+    private suspend fun assistGate(): ActionResult? {
+        if (!settings.uiAssistEnabled.first()) {
+            return ActionResult.error("UI 代操作总开关未开启，可在 设置 → UI 代操作 里打开")
+        }
+        if (!com.lingxi.service.LingXiAccessibilityService.enabled) {
+            return ActionResult.error("灵犀的无障碍服务未开启，请到系统设置 → 无障碍 里开启")
+        }
+        return null
+    }
+
+    /** F9 读屏：当前窗口可见文字（不执行任何操作，低风险） */
+    private suspend fun readScreen(): ActionResult {
+        assistGate()?.let { return it }
+        val text = runCatching { com.lingxi.service.LingXiAccessibilityService.readScreenText() }
+            .getOrElse { return ActionResult.error("读取屏幕失败：${it.message ?: "未知原因"}") }
+        if (text.isNullOrBlank()) return ActionResult.error("当前屏幕没有可读的文字内容")
+        return ActionResult.ok(
+            "我看了下当前屏幕：" + text.lineSequence().take(6).joinToString("，").take(120),
+            cardTitle = "当前屏幕内容",
+            cardBody = text,
+        ).also { logAudit("read_screen", "读取当前屏幕", true) }
+    }
+
+    /** F9 代点：点击包含指定文字的元素（引擎侧已先过 ConfirmGate） */
+    private suspend fun clickUi(argsJson: String): ActionResult {
+        assistGate()?.let { return it }
+        val target = parseArgs(argsJson)["target"]?.trim().orEmpty()
+        if (target.isBlank()) return ActionResult.error("缺少 target 参数")
+        val ok = runCatching { com.lingxi.service.LingXiAccessibilityService.clickText(target) }
+            .getOrElse { false }
+        logAudit("click_ui", "点击「$target」", ok)
+        return if (ok) {
+            ActionResult.ok("已点击「$target」", cardTitle = "UI 代操作", cardBody = "已点击：$target")
+        } else {
+            ActionResult.error("当前屏幕没找到可点击的「$target」")
+        }
+    }
+
+    private suspend fun logAudit(action: String, detail: String, success: Boolean) {
+        runCatching { com.lingxi.data.assist.AuditLog.append(app, action, detail, success) }
     }
 
     /** F13 委托任务：create/list/cancel/pause/resume */

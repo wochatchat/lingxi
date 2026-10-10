@@ -12,6 +12,12 @@
     <!-- F12 日程提醒：读系统日历（运行时权限，用到时申请） -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
 
+    <!-- F10 截屏问答：读相册最近一张截图（运行时权限） -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <!-- 呈现层（R3 耳语胶囊/对话卡片） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 

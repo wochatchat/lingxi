@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">灵犀</string>
+    <string name="assist_service_desc">UI 代操作：让灵犀读取当前屏幕文字、代点屏幕元素（默认关，逐项确认，操作留审计日志）。注意：在第三方应用内使用辅助服务可能违反该应用的用户协议，存在账号受限等风险。</string>
 </resources>

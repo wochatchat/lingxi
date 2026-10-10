@@ -44,6 +44,7 @@ class ConversationEngine @javax.inject.Inject constructor(
     private val tts: TtsEngine,
     private val memory: com.lingxi.data.memory.MemoryStore,
     private val executor: ActionExecutor,
+    private val captor: com.lingxi.data.screen.ScreenCaptor,
 ) {
     private val _state = MutableStateFlow<ConvState>(ConvState.Idle)
     val state: StateFlow<ConvState> = _state.asStateFlow()
@@ -65,6 +66,13 @@ class ConversationEngine @javax.inject.Inject constructor(
 
     /** 用户对 pendingUi 的应答（确认/取消/选择索引） */
     @Volatile private var pendingAnswer: CompletableDeferred<String>? = null
+
+    /** F16 全离线模式（LingXiApp 收集设置后写入；引擎不直接依赖 DataStore） */
+    @Volatile var offlineMode: Boolean = false
+        private set
+
+    /** 由应用层同步全离线开关 */
+    fun setOfflineMode(enabled: Boolean) { offlineMode = enabled }
 
     /**
      * 跑一轮对话。挂起直到 LLM 流结束且 TTS 播完。
@@ -95,20 +103,31 @@ class ConversationEngine @javax.inject.Inject constructor(
 
             // F5 意图路由：DIRECT 命中 → 零 token 直接执行
             val route = IntentRouter.route(user)
+            // F10 截屏问答：确认后随本轮消息多模态上行
+            var attachedImages: List<ChatImage> = emptyList()
             when (route) {
                 is IntentRouter.Route.Direct -> {
                     finishDirectTurn(user, route)
                     return
                 }
-                IntentRouter.Route.ToolsLlm -> Unit // 走 LLM tools 路径
-                IntentRouter.Route.Chat -> Unit
+                IntentRouter.Route.ToolsLlm, IntentRouter.Route.Chat, IntentRouter.Route.Screenshot -> {
+                    // F16 全离线模式：云端对话停用，仅系统动作（上面 DIRECT 分支）可用
+                    if (offlineMode) {
+                        finishOfflineTurn(user)
+                        return
+                    }
+                    if (route == IntentRouter.Route.Screenshot) {
+                        val image = prepareScreenshotImage(user) ?: return
+                        attachedImages = listOf(image)
+                    }
+                }
             }
             seedFromMemory()
             val systemPrompt = buildMemoryPrompt()
             val request = buildList {
                 add(ChatMessage("system", systemPrompt))
                 addAll(messages.toList())
-                add(ChatMessage("user", user))
+                add(ChatMessage("user", user, attachedImages))
             }
             _state.value = ConvState.Thinking("")
             // 首句预读：12 字内遇停顿即切出，TTS 队列天然预读后续句（PRD「提前 2 句预读」基座）
@@ -161,9 +180,48 @@ class ConversationEngine @javax.inject.Inject constructor(
         }
     }
 
+    /** F16 全离线占位回复：云端对话停用，系统动作（DIRECT）仍可执行 */
+    private suspend fun finishOfflineTurn(user: String) {
+        _state.value = ConvState.Thinking("")
+        val msg = "现在是全离线模式，联网对话已停用；设闹钟、打开应用、定提醒这类系统操作我仍然可以直接执行。"
+        tts.enqueue(msg)
+        finishTurnWithAction(user, msg, null)
+    }
+
+    /** F10 截屏问答准备：取最近截图 + 上传确认门；返回 null 表示本轮已收尾（没截图/用户取消） */
+    private suspend fun prepareScreenshotImage(user: String): ChatImage? {
+        _state.value = ConvState.Thinking("")
+        if (!captor.hasPermission()) {
+            val msg = "读取截图需要照片权限，请在设置里授权后重试"
+            tts.enqueue(msg)
+            finishTurnWithAction(user, msg, null)
+            return null
+        }
+        val shot = runCatching { captor.latestScreenshot() }.getOrNull()
+        if (shot == null) {
+            val msg = "没找到最近的截图，请先截一张屏，再对我说「看看屏幕上这个」"
+            tts.enqueue(msg)
+            finishTurnWithAction(user, msg, null)
+            return null
+        }
+        val gate = UiAction(
+            type = UiAction.UiType.ConfirmGate,
+            title = "截屏问答",
+            body = "要把最近一张截图上传给 AI 分析吗？（截图内容会发送到所配置的 AI 服务，注意隐私）",
+        )
+        tts.enqueue(stripMarkdownForSpeech(UiAction.confirmVoicePrompt(gate)))
+        val answer = askUser(gate)
+        if (answer != CONFIRMED) {
+            val msg = "好的，先不上传截图"
+            tts.enqueue(msg)
+            finishTurnWithAction(user, msg, gate.copy(resolvedText = "已取消"))
+            return null
+        }
+        return ChatImage(mime = shot.mime, base64 = shot.base64)
+    }
+
     /** 语音输入完整一轮：ASR → runTurn（ASR 失败不进对话） */
-    suspend fun runVoiceTurn(
-        audio: ByteArray,
+    suspend fun runVoiceTurn(        audio: ByteArray,
         sampleRate: Int,
         asr: AsrEngine,
         apiKey: String,
@@ -211,6 +269,31 @@ class ConversationEngine @javax.inject.Inject constructor(
         // ui_action 工具：LLM 自发下发 UI 意图（Stream-UI 的 LLM 驱动入口）
         if (ev.name == "ui_action") {
             return showUiAction(ev.argsJson)
+        }
+        // F9 代点：永远先过确认门（GuardedIO：人按最后一键）
+        if (ev.name == "click_ui") {
+            val target = runCatching {
+                Json.parseToJsonElement(ev.argsJson.ifBlank { "{}" }).jsonObject
+            }.getOrNull()?.get("target")?.jsonPrimitive?.contentOrNull.orEmpty()
+            val gate = UiAction(
+                type = UiAction.UiType.ConfirmGate,
+                title = "UI 代操作",
+                body = "要在当前屏幕点击「$target」吗？",
+            )
+            tts.enqueue(stripMarkdownForSpeech(UiAction.confirmVoicePrompt(gate)))
+            val answer = askUser(gate)
+                ?: return "超时了，先不点" to gate.copy(resolvedText = "超时未确认")
+            if (answer != CONFIRMED) {
+                return "好的，先不点" to gate.copy(resolvedText = "已取消")
+            }
+            val clickResult = runCatching { executor.execute("click_ui", ev.argsJson) }
+                .getOrElse { ActionResult.error(it.message ?: "执行失败") }
+            tts.enqueue(stripMarkdownForSpeech(clickResult.spoken))
+            return "" to UiAction(
+                type = UiAction.UiType.InfoCard,
+                title = "UI 代操作",
+                body = if (clickResult.success) "已点击：$target" else (clickResult.errorMessage ?: "点击失败"),
+            )
         }
         // send_sms 走 ConfirmGate（安全边界：短信必须过确认门）
         if (ev.name == "send_sms") {

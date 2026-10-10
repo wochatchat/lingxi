@@ -23,6 +23,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -59,6 +60,9 @@ class ProvidersViewModel @Inject constructor(
     val providers = repo.providers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** F18 存储模式（true = AndroidKeyStore 加密；false = 降级普通 prefs） */
+    val encryptedStorage = repo.isEncryptedStorage
+
     fun upsert(config: ProviderConfig, apiKey: String?) =
         viewModelScope.launch { repo.upsert(config, apiKey) }
 
@@ -71,6 +75,14 @@ class ProvidersViewModel @Inject constructor(
         viewModelScope.launch { onResult(repo.testConnection(config, apiKey)) }
 
     fun apiKeyOf(id: String): String = repo.getApiKey(id)
+
+    /** F18：清除全部 API Key（配置保留） */
+    fun clearAllKeys(onDone: () -> Unit) =
+        viewModelScope.launch { repo.clearAllKeys(); onDone() }
+
+    /** F18：导出配置 JSON（不含 Key） */
+    fun exportConfigs(onResult: (String) -> Unit) =
+        viewModelScope.launch { onResult(repo.exportConfigsJson()) }
 }
 
 /** Provider 配置中心（F6）：云厂商 / 中转站 / 本地 Ollama 统一配置 */
@@ -113,6 +125,8 @@ fun ProviderSettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
+            SecurityFooterSection(viewModel)
+            Spacer(modifier = Modifier.height(8.dp))
             if (providers.isEmpty()) {
                 Text(
                     "还没有配置。点右下角 + 添加第一个 AI 服务。",
@@ -139,6 +153,55 @@ fun ProviderSettingsScreen(
             existing = editing,
             viewModel = viewModel,
             onDismiss = { showAdd = false; editing = null },
+        )
+    }
+}
+
+/** F18 收尾：存储模式展示 + 导出配置（不含 Key）+ 清除全部 Key */
+@Composable
+private fun SecurityFooterSection(viewModel: ProvidersViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var confirmClear by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = if (viewModel.encryptedStorage) "🔒 Key 存储：AndroidKeyStore 加密" else "⚠ Key 存储：加密初始化失败，已降级普通 prefs（仅本机私有目录）",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.OutlinedButton(onClick = {
+            viewModel.exportConfigs { json ->
+                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                    as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("lingxi_providers", json))
+                notice = "配置已复制到剪贴板（不含 API Key）"
+            }
+        }) { Text("导出配置（不含 Key）") }
+        androidx.compose.material3.OutlinedButton(onClick = { confirmClear = true }) {
+            Text("清除全部 Key", color = MaterialTheme.colorScheme.error)
+        }
+    }
+    notice?.let {
+        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+    }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("清除全部 API Key") },
+            text = { Text("将删除本机存储的所有 API Key（服务配置保留，重新填 Key 即可使用）。确定继续？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClear = false
+                    viewModel.clearAllKeys { notice = "已清除全部 API Key" }
+                }) { Text("清除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text("取消") }
+            },
         )
     }
 }

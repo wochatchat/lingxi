@@ -30,23 +30,29 @@ class ProviderRepository @javax.inject.Inject constructor(
     private val jsonKey = stringPreferencesKey("providers_json")
 
     /** API Key 安全存储：优先 EncryptedSharedPreferences，失败降级普通 prefs */
-    private val securePrefs: SharedPreferences by lazy {
+    private val securePrefsPair: Pair<SharedPreferences, Boolean> by lazy {
         runCatching {
             val masterKey = androidx.security.crypto.MasterKey.Builder(context)
                 .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
                 .build()
-            EncryptedSharedPreferences.create(
+            val prefs = EncryptedSharedPreferences.create(
                 context,
                 "lingxi_secure_prefs",
                 masterKey,
                 androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
             )
+            prefs to true
         }.getOrElse {
             android.util.Log.w("ProviderRepo", "EncryptedSharedPreferences init failed, falling back", it)
-            context.getSharedPreferences("lingxi_keys_fallback", Context.MODE_PRIVATE)
+            context.getSharedPreferences("lingxi_keys_fallback", Context.MODE_PRIVATE) to false
         }
     }
+
+    private val securePrefs: SharedPreferences get() = securePrefsPair.first
+
+    /** F18 存储模式：true = AndroidKeyStore + EncryptedSharedPreferences；false = 降级普通 prefs（UI 提示） */
+    val isEncryptedStorage: Boolean get() = securePrefsPair.second
 
     /** 配置列表（不含 key 明文） */
     val providers: Flow<List<ProviderConfig>> = context.providerDataStore.data
@@ -77,6 +83,17 @@ class ProviderRepository @javax.inject.Inject constructor(
 
     fun setApiKey(providerId: String, key: String) {
         securePrefs.edit().putString(providerId, key.trim()).apply()
+    }
+
+    /** F18 收尾：清除全部 API Key（配置保留，重新填 Key 即可用） */
+    fun clearAllKeys() {
+        securePrefs.edit().clear().apply()
+    }
+
+    /** F18 收尾：导出配置 JSON（不含 Key，剪贴板/备份用） */
+    suspend fun exportConfigsJson(): String {
+        val list = providers.first()
+        return ProviderCodec.encode(list.sortedBy { it.name })
     }
 
     /** 供对话引擎取「默认可用的 provider」；R5 意图路由在此基础上扩展 */

@@ -82,6 +82,14 @@ class ConversationEngineTest {
     }
 
     private fun fakeExecutor() = FakeExecutor()
+    /** 截屏来源 fake：可配置最近截图（F10 用例） */
+    private class FakeCaptor(
+        private val image: com.lingxi.data.screen.ScreenImage? = null,
+        private val hasPerm: Boolean = true,
+    ) : com.lingxi.data.screen.ScreenCaptor {
+        override fun hasPermission(): Boolean = hasPerm
+        override suspend fun latestScreenshot(): com.lingxi.data.screen.ScreenImage? = image
+    }
 
     @Test
     fun `级联全通 - 句切分入 TTS 且历史落账`() = runTest {
@@ -95,7 +103,7 @@ class ConversationEngineTest {
             tts,
             memory,
             fakeExecutor(),
-        )
+         FakeCaptor())
         engine.runTurn("你好", "k", "https://x/v1", "m")
         assertEquals(listOf("你好！", "今天天气不错。"), tts.spoken)
         assertEquals(ConvState.Idle, engine.state.value)
@@ -112,7 +120,7 @@ class ConversationEngineTest {
             tts,
             FakeMemoryStore(),
             fakeExecutor(),
-        )
+         FakeCaptor())
         engine.runTurn("q", "k", "u", "m")
         assertEquals(listOf("答案是没有句号的结尾"), tts.spoken)
     }
@@ -120,7 +128,7 @@ class ConversationEngineTest {
     @Test
     fun `LLM 失败转 Failed 且停播`() = runTest {
         val tts = FakeTts()
-        val engine = ConversationEngine(FakeLlm(listOf(LlmEvent.Failed("HTTP 401"))), tts, FakeMemoryStore(), fakeExecutor())
+        val engine = ConversationEngine(FakeLlm(listOf(LlmEvent.Failed("HTTP 401"))), tts, FakeMemoryStore(), fakeExecutor(), FakeCaptor())
         engine.runTurn("hi", "k", "https://x/v1", "m")
         assertTrue(engine.state.value is ConvState.Failed)
         assertTrue(tts.stopped)
@@ -129,7 +137,7 @@ class ConversationEngineTest {
     @Test
     fun `语音轮 ASR 失败不进对话`() = runTest {
         val tts = FakeTts()
-        val engine = ConversationEngine(FakeLlm(emptyList()), tts, FakeMemoryStore(), fakeExecutor())
+        val engine = ConversationEngine(FakeLlm(emptyList()), tts, FakeMemoryStore(), fakeExecutor(), FakeCaptor())
         engine.runVoiceTurn(ByteArray(100), 16_000, FakeAsr("", Exception("网络断")), "k", "u", "m")
         assertTrue(engine.state.value is ConvState.Failed)
         assertEquals(0, engine.history.value.size)
@@ -143,7 +151,7 @@ class ConversationEngineTest {
             tts,
             FakeMemoryStore(),
             fakeExecutor(),
-        )
+         FakeCaptor())
         engine.runVoiceTurn(ByteArray(100), 16_000, FakeAsr("几点了"), "k", "u", "m")
         assertEquals(listOf("好的。"), tts.spoken)
         assertEquals(ConvState.Idle, engine.state.value)
@@ -158,7 +166,7 @@ class ConversationEngineTest {
             tts,
             FakeMemoryStore(),
             fakeExecutor(),
-        )
+         FakeCaptor())
         engine.runTurn("q", "k", "u", "m")
         assertEquals(listOf("重点：先吃饭。"), tts.spoken)
     }
@@ -173,7 +181,7 @@ class ConversationEngineTest {
             summaries = listOf(DailySummary("2026-10-08", "- 讨论了周报结构")),
         )
         val llm = FakeLlm(listOf(LlmEvent.Delta("好的。"), LlmEvent.Completed("stop")))
-        val engine = ConversationEngine(llm, tts, memory, fakeExecutor())
+        val engine = ConversationEngine(llm, tts, memory, fakeExecutor(), FakeCaptor())
         engine.runTurn("q", "k", "u", "m")
         val system = llm.lastMessages.first()
         assertEquals("system", system.role)
@@ -194,7 +202,7 @@ class ConversationEngineTest {
             ),
         )
         val llm = FakeLlm(listOf(LlmEvent.Delta("嗯。"), LlmEvent.Completed("stop")))
-        val engine = ConversationEngine(llm, tts, memory, fakeExecutor())
+        val engine = ConversationEngine(llm, tts, memory, fakeExecutor(), FakeCaptor())
         engine.runTurn("继续", "k", "u", "m")
         // 断言放宽为序无关：UI 历史含预加载 + 本轮；请求 system 打头、本轮 user 在末尾
         assertTrue(engine.history.value.size >= 2)
@@ -213,7 +221,7 @@ class ConversationEngineTest {
             tts,
             memory,
             fakeExecutor(),
-        )
+         FakeCaptor())
         engine.runTurn("记住我叫阿哲", "k", "u", "m")
         assertEquals(1, memory.appended.size)
         assertEquals("记住我叫阿哲", memory.appended[0].first)
@@ -223,7 +231,7 @@ class ConversationEngineTest {
     fun `LLM 失败不落记忆`() = runTest {
         val tts = FakeTts()
         val memory = FakeMemoryStore()
-        val engine = ConversationEngine(FakeLlm(listOf(LlmEvent.Failed("HTTP 401"))), tts, memory, fakeExecutor())
+        val engine = ConversationEngine(FakeLlm(listOf(LlmEvent.Failed("HTTP 401"))), tts, memory, fakeExecutor(), FakeCaptor())
         engine.runTurn("hi", "k", "u", "m")
         assertEquals(0, memory.appended.size)
     }
@@ -239,7 +247,7 @@ class ConversationEngineTest {
             LlmEvent.ToolCall("set_alarm", """{"hour":7,"minute":30}"""),
             LlmEvent.Completed("tool_calls"),
         ))
-        val engine = ConversationEngine(llm, tts, FakeMemoryStore(), ex)
+        val engine = ConversationEngine(llm, tts, FakeMemoryStore(), ex, FakeCaptor())
         engine.runTurn("七点半叫我起床", "k", "u", "m")
         assertEquals("set_alarm", ex.calls.first().first)
         assertTrue(tts.spoken.any { it.contains("闹钟") || it.contains("07:30") })
@@ -254,7 +262,7 @@ class ConversationEngineTest {
             ActionResult.candidates(listOf("微信", "企业微信")),
             ActionResult.ok("已打开 微信", cardTitle = "已打开", cardBody = "微信"),
         )
-        val engine = ConversationEngine(FakeLlm(emptyList()), tts, FakeMemoryStore(), ex)
+        val engine = ConversationEngine(FakeLlm(emptyList()), tts, FakeMemoryStore(), ex, FakeCaptor())
         val job = launch { engine.runTurn("打开微信", "k", "u", "m") }
         testScheduler.runCurrent()
         assertEquals(UiAction.UiType.ChoiceSheet, engine.pendingUi.value?.type)
@@ -275,7 +283,7 @@ class ConversationEngineTest {
             ActionResult.candidates(listOf("微信", "企业微信")),
             ActionResult.ok("已打开 企业微信", cardTitle = "已打开", cardBody = "企业微信"),
         )
-        val engine = ConversationEngine(FakeLlm(emptyList()), FakeTts(), FakeMemoryStore(), ex)
+        val engine = ConversationEngine(FakeLlm(emptyList()), FakeTts(), FakeMemoryStore(), ex, FakeCaptor())
         val job = launch { engine.runTurn("打开微信", "k", "u", "m") }
         testScheduler.runCurrent()
         assertEquals(UiAction.UiType.ChoiceSheet, engine.pendingUi.value?.type)
@@ -284,5 +292,78 @@ class ConversationEngineTest {
         job.join()
         assertEquals(2, ex.calls.size)
         assertTrue(ex.calls[1].second.contains("企业微信"))
+    }
+
+    // ---- R8 F16 全离线模式 ----
+
+    @Test
+    fun `全离线模式 - 闲聊给占位回复且不调 LLM`() = runTest {
+        val llm = FakeLlm(emptyList())
+        val tts = FakeTts()
+        val engine = ConversationEngine(llm, tts, FakeMemoryStore(), fakeExecutor(), FakeCaptor())
+        engine.setOfflineMode(true)
+        engine.runTurn("今天天气怎么样", "k", "u", "m")
+        assertTrue(tts.spoken.single().contains("全离线"))
+        assertEquals(0, llm.lastMessages.size) // 完全没碰 LLM
+        assertEquals(ConvState.Idle, engine.state.value)
+        assertEquals(1, engine.history.value.size)
+    }
+
+    @Test
+    fun `全离线模式下系统动作仍直执行`() = runTest {
+        val ex = FakeExecutor(ActionResult.ok("已打开 设置", cardTitle = "已打开", cardBody = "设置"))
+        val engine = ConversationEngine(FakeLlm(emptyList()), FakeTts(), FakeMemoryStore(), ex, FakeCaptor())
+        engine.setOfflineMode(true)
+        engine.runTurn("打开设置", "k", "u", "m")
+        assertEquals(listOf("open_app" to """{"app_name":"设置"}"""), ex.calls)
+    }
+
+    // ---- R8 F10 截屏问答 ----
+
+    @Test
+    fun `截屏意图 - 确认后截图随消息上行`() = runTest {
+        val image = com.lingxi.data.screen.ScreenImage("image/jpeg", "QUJD")
+        val llm = FakeLlm(listOf(LlmEvent.Delta("屏幕上是天气页面。"), LlmEvent.Completed("stop")))
+        val engine = ConversationEngine(
+            llm, FakeTts(), FakeMemoryStore(), fakeExecutor(),
+            FakeCaptor(image = image),
+        )
+        val job = launch { engine.runTurn("看看屏幕上这个", "k", "u", "m") }
+        testScheduler.runCurrent()
+        // 上传前必须先弹确认门
+        assertEquals(UiAction.UiType.ConfirmGate, engine.pendingUi.value?.type)
+        engine.onUiConfirm(true)
+        job.join()
+        // LLM 收到的 user 消息带图片
+        val userMsg = llm.lastMessages.last()
+        assertEquals("user", userMsg.role)
+        assertEquals(1, userMsg.images.size)
+        assertEquals("image/jpeg", userMsg.images[0].mime)
+        assertEquals("QUJD", userMsg.images[0].base64)
+    }
+
+    @Test
+    fun `截屏问答 - 用户取消则不调 LLM`() = runTest {
+        val llm = FakeLlm(listOf(LlmEvent.Delta("嗯。"), LlmEvent.Completed("stop")))
+        val engine = ConversationEngine(
+            llm, FakeTts(), FakeMemoryStore(), fakeExecutor(),
+            FakeCaptor(image = com.lingxi.data.screen.ScreenImage("image/png", "AAA")),
+        )
+        val job = launch { engine.runTurn("看看屏幕", "k", "u", "m") }
+        testScheduler.runCurrent()
+        assertEquals(UiAction.UiType.ConfirmGate, engine.pendingUi.value?.type)
+        engine.onUiConfirm(false)
+        job.join()
+        // 未确认 → 不上行
+        assertEquals(0, llm.lastMessages.size)
+        assertTrue(engine.history.value[0].reply.contains("先不上传"))
+    }
+
+    @Test
+    fun `截屏问答 - 没截图给提示`() = runTest {
+        val engine = ConversationEngine(FakeLlm(emptyList()), FakeTts(), FakeMemoryStore(), fakeExecutor(), FakeCaptor(image = null))
+        engine.runTurn("看看屏幕上这个", "k", "u", "m")
+        assertEquals(1, engine.history.value.size)
+        assertTrue(engine.history.value[0].reply.contains("没找到最近的截图"))
     }
 }
