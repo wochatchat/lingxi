@@ -38,8 +38,9 @@ class CalendarFilterTest {
 
     @Test
     fun `describe 马上与倒计时两种`() {
-        val soon = event(1, "会", 5)
-        val later = event(2, "会", 25)
+        val now = System.currentTimeMillis()
+        val soon = CalendarEvent(1, "会", begin = now + 5 * 60_000L, end = now + 6 * 60_000L)
+        val later = CalendarEvent(2, "会", begin = now + 25 * 60_000L, end = now + 26 * 60_000L)
         assertTrue(soon.describe(15).contains("马上"))
         assertTrue(later.describe(15).contains("25分钟后"))
     }
