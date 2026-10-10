@@ -26,7 +26,7 @@ class PowerStatsTest {
             BatterySample(now, 60, false),
         )
         val s = PowerStatsCalculator.compute(samples, now)
-        assertEquals(80, s.currentLevel)
+        assertEquals(60, s.currentLevel)
         assertEquals(20, s.drop24h)
     }
 
@@ -47,7 +47,7 @@ class PowerStatsTest {
             BatterySample(now, 70, false),
         )
         val s = PowerStatsCalculator.compute(samples, now)
-        assertEquals(60, s.currentLevel)
+        assertEquals(70, s.currentLevel)
         assertEquals(null, s.drop24h)
     }
 

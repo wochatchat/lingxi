@@ -3,6 +3,7 @@ package com.lingxi.delegation
 import com.lingxi.data.delegation.CalendarEvent
 import com.lingxi.data.delegation.CalendarReader
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -42,6 +43,9 @@ class CalendarFilterTest {
         val soon = CalendarEvent(1, "会", begin = now + 5 * 60_000L, end = now + 6 * 60_000L)
         val later = CalendarEvent(2, "会", begin = now + 25 * 60_000L, end = now + 26 * 60_000L)
         assertTrue(soon.describe(15).contains("马上"))
-        assertTrue(later.describe(15).contains("25分钟后"))
+        // 不写死具体分钟数：now 捕获到 describe 执行之间会流逝毫秒，整数除法可能掉 1 分钟
+        val desc = later.describe(15)
+        assertTrue(desc.contains("分钟后"))
+        assertFalse(soon.describe(15).contains("分钟后"))
     }
 }
