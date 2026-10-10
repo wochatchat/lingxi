@@ -20,9 +20,9 @@ import javax.inject.Singleton
  */
 object ExpressTracking {
 
-    /** 从任务标题/口述文本里提取快递单号：8-15 位纯数字，或字母开头+数字混合（8-15 位）。 */
+    /** 从任务标题/口述文本里提取快递单号：8-15 位纯数字，或 1-3 位字母前缀+数字（共 8-15 位）。 */
     fun extractTrackingNo(text: String): String? {
-        val m = Regex("""(?<![A-Za-z0-9])([A-Za-z][0-9]{7,14}|[0-9]{8,15})(?![0-9A-Za-z])""")
+        val m = Regex("""(?<![A-Za-z0-9])([A-Za-z]{1,3}[0-9]{7,14}|[0-9]{8,15})(?![0-9A-Za-z])""")
             .find(text.replace("　", " "))
             ?: return null
         return m.groupValues[1].uppercase()
