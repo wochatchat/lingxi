@@ -26,20 +26,29 @@ class WeatherClient @Inject constructor() {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** 「上海」→「多云 12°C」（失败返回 null） */
+    /** 「上海」→「多云 12°C」（失败返回 null；成功结果由调用方落缓存） */
     suspend fun currentSummary(city: String): String? = withContext(Dispatchers.IO) {
         runCatching {
             val (lat, lon) = geocode(city) ?: return@runCatching null
-            val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
-                "&current_weather=true&timezone=auto"
-            val body = client.newCall(Request.Builder().url(url).build()).execute()
-                .use { it.body?.string() } ?: return@runCatching null
-            val root = json.parseToJsonElement(body).jsonObject
-            val current = root["current_weather"]?.jsonObject ?: return@runCatching null
-            val temp = current["temperature"]?.jsonPrimitive?.content ?: return@runCatching null
-            val code = current["weathercode"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-            "${codeName(code)} ${temp}°C"
+            fetchCurrent(lat, lon)
         }.getOrNull()
+    }
+
+    /** R15 位置精化：已知经纬度直查天气（跳过 geocode；失败返回 null） */
+    suspend fun currentSummaryAt(lat: Double, lon: Double): String? = withContext(Dispatchers.IO) {
+        runCatching { fetchCurrent(lat, lon) }.getOrNull()
+    }
+
+    private fun fetchCurrent(lat: Double, lon: Double): String? {
+        val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
+            "&current_weather=true&timezone=auto"
+        val body = client.newCall(Request.Builder().url(url).build()).execute()
+            .use { it.body?.string() } ?: return null
+        val root = json.parseToJsonElement(body).jsonObject
+        val current = root["current_weather"]?.jsonObject ?: return null
+        val temp = current["temperature"]?.jsonPrimitive?.content ?: return null
+        val code = current["weathercode"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+        return "${codeName(code)} ${temp}°C"
     }
 
     /** 城市名 → (lat, lon)，失败返回 null */

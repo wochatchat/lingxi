@@ -30,11 +30,40 @@ interface WorkerEntryPoint {
     fun inspection(): com.lingxi.data.inspection.InspectionAgent
     /** R13：兴趣/行为统计（晨报产出 → morning_report 行为计数） */
     fun memory(): com.lingxi.data.memory.MemoryRepository
+    /** R15：位置快照（晨报城市未配置时按位置精化天气） */
+    fun location(): com.lingxi.data.location.LocationResolver
 }
 
 /** worker 内取依赖入口的小工具 */
 private fun Context.entry(): WorkerEntryPoint =
     EntryPointAccessors.fromApplication(applicationContext, WorkerEntryPoint::class.java)
+
+/**
+ * R15 晨报天气解析（含断网降级）：
+ * 1. 城市已配置 → 实时天气，成功则落缓存；
+ * 2. 拉取失败 → 上次成功缓存（标注「缓存」）；
+ * 3. 城市未配置 + 有位置权限 → 按最后已知位置精化天气。
+ */
+private suspend fun resolveWeatherLine(
+    entry: WorkerEntryPoint,
+    settings: SettingsRepository,
+    city: String,
+): String? {
+    if (city.isNotBlank()) {
+        val live = entry.weather().currentSummary(city)
+        if (live != null) {
+            runCatching { settings.setLastWeather(live) }
+            return live
+        }
+        val cached = runCatching { settings.lastWeather.first() }.getOrDefault("")
+        return cached.takeIf { it.isNotBlank() }?.let { "$it（缓存）" }
+    }
+    // 城市未配置：按位置精化（无权限/无定位记录 → 不带天气）
+    val loc = entry.location().lastKnownOrNull() ?: return null
+    val live = entry.weather().currentSummaryAt(loc.first, loc.second) ?: return null
+    runCatching { settings.setLastWeather(live) }
+    return live
+}
 
 /**
  * F13 一次性提醒 worker：到点标记完成 + 通知（结果播报走通知通道，不抢前台对话）。
@@ -132,7 +161,7 @@ class MorningReportWorker(appContext: Context, params: WorkerParameters) :
         val settings = entry.settings()
         if (settings.morningReportEnabled.first()) {
             val city = settings.morningReportCity.first()
-            val weatherLine = city.takeIf { it.isNotBlank() }?.let { entry.weather().currentSummary(it) }
+            val weatherLine = resolveWeatherLine(entry, settings, city)
             val events = entry.calendar().todayEvents().map { it.display() }
             val active = entry.delegation().activeTasks()
             val report = entry.composer().compose(

@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { LOADING, ONBOARD, HOME, PROVIDERS, GENERAL, MEMORY, DELEGATIONS, POWER, ASSIST }
+private enum class Screen { LOADING, ONBOARD, HOME, PROVIDERS, GENERAL, MEMORY, DELEGATIONS, POWER, ASSIST, PERMISSIONS }
 
 /** 根路由：F15 首启（未完成引导）先进引导屏，完成后进主页 */
 @Composable
@@ -75,5 +75,6 @@ private fun RootRoute(settings: SettingsRepository) {
         Screen.MEMORY -> MemoryScreen(onBack = { screen = Screen.HOME })
         Screen.POWER -> com.lingxi.ui.settings.PowerPanelScreen(onBack = { screen = Screen.HOME })
         Screen.ASSIST -> com.lingxi.ui.settings.AssistScreen(onBack = { screen = Screen.HOME })
+        Screen.PERMISSIONS -> com.lingxi.ui.settings.PermissionCenterScreen(onBack = { screen = Screen.HOME })
     }
 }

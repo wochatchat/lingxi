@@ -12,6 +12,11 @@
     <!-- F12 日程提醒：读系统日历（运行时权限，用到时申请） -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
 
+    <!-- R15：发短信时姓名→号码查通讯录（运行时权限，权限中心页统一管理） -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- R15：晨报天气位置精化（城市未配置时用最后已知位置查天气） -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
     <!-- F10 截屏问答：读相册最近一张截图（运行时权限） -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission

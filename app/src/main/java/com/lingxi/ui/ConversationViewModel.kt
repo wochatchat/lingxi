@@ -170,7 +170,9 @@ class ConversationViewModel @Inject constructor(
                 return@launch
             }
             if (!runner.runVoiceTurn(pcm, rate)) {
-                _ui.value = _ui.value.copy(engineState = ConvState.Failed("", "请先在设置里配置一个 AI 服务"))
+                _ui.value = _ui.value.copy(
+                    engineState = ConvState.Failed("", "没有可用的语音识别通道（可配置 AI 服务，或用下方文本输入）"),
+                )
             }
         }
     }

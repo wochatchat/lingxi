@@ -163,6 +163,7 @@ fun GeneralSettingsScreen(
     onOpenMemory: () -> Unit = {},
     onOpenPower: () -> Unit = {},
     onOpenAssist: () -> Unit = {},
+    onOpenPermissions: () -> Unit = {},
     vm: GeneralSettingsViewModel = hiltViewModel(),
 ) {
     val ui by vm.state.collectAsState()
@@ -205,6 +206,11 @@ fun GeneralSettingsScreen(
                 title = "UI 代操作（实验）",
                 subtitle = "无障碍读屏 + 代点屏幕元素；默认关、逐项确认、审计可查",
                 onClick = onOpenAssist,
+            )
+            EntryRow(
+                title = "权限中心",
+                subtitle = "全部权限清单与状态；一键跳系统设置授权",
+                onClick = onOpenPermissions,
             )
             SwitchRow(
                 title = "悬浮胶囊",

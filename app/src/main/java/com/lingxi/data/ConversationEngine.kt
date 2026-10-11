@@ -7,6 +7,9 @@ import com.lingxi.data.functions.ToolDefs
 import com.lingxi.data.memory.BehaviorPredictor
 import com.lingxi.data.memory.MemoryPrompts
 import com.lingxi.data.memory.MemoryStore
+import com.lingxi.data.net.NetStatus
+import com.lingxi.data.net.NetTier
+import com.lingxi.data.net.AlwaysOnlineNetStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
@@ -47,6 +50,7 @@ class ConversationEngine @javax.inject.Inject constructor(
     private val memory: com.lingxi.data.memory.MemoryStore,
     private val executor: ActionExecutor,
     private val captor: com.lingxi.data.screen.ScreenCaptor,
+    private val net: NetStatus = AlwaysOnlineNetStatus,
 ) {
     private val _state = MutableStateFlow<ConvState>(ConvState.Idle)
     val state: StateFlow<ConvState> = _state.asStateFlow()
@@ -113,6 +117,12 @@ class ConversationEngine @javax.inject.Inject constructor(
 
             // F5 意图路由：DIRECT 命中 → 零 token 直接执行
             val route = IntentRouter.route(user)
+            // F16/R15 网络三档：断网或全离线 → 联网对话停用；DIRECT 系统动作不受影响
+            val netTier = net.current()
+            if (offlineMode || netTier == NetTier.OFFLINE) {
+                finishOfflineTurn(user, offlineMode)
+                return
+            }
             // F10 截屏问答：确认后随本轮消息多模态上行
             var attachedImages: List<ChatImage> = emptyList()
             when (route) {
@@ -121,9 +131,9 @@ class ConversationEngine @javax.inject.Inject constructor(
                     return
                 }
                 IntentRouter.Route.ToolsLlm, IntentRouter.Route.Chat, IntentRouter.Route.Screenshot -> {
-                    // F16 全离线模式：云端对话停用，仅系统动作（上面 DIRECT 分支）可用
-                    if (offlineMode) {
-                        finishOfflineTurn(user)
+                    // R15：未配置 AI 服务的友好兜底（DIRECT 系统动作不受影响）
+                    if (apiKey.isBlank()) {
+                        finishNoProviderTurn(user)
                         return
                     }
                     if (route == IntentRouter.Route.Screenshot) {
@@ -133,7 +143,9 @@ class ConversationEngine @javax.inject.Inject constructor(
                 }
             }
             seedFromMemory()
-            val systemPrompt = buildMemoryPrompt()
+            // R15 弱网：system prompt 追加短回复约束（不另发请求）
+            val systemPrompt = buildMemoryPrompt() +
+                if (netTier == NetTier.WEAK) WEAK_NET_SUFFIX else ""
             val request = buildList {
                 add(ChatMessage("system", systemPrompt))
                 addAll(messages.toList())
@@ -192,10 +204,22 @@ class ConversationEngine @javax.inject.Inject constructor(
         }
     }
 
-    /** F16 全离线占位回复：云端对话停用，系统动作（DIRECT）仍可执行 */
-    private suspend fun finishOfflineTurn(user: String) {
+    /** F16 全离线/R15 断网占位回复：云端对话停用，系统动作（DIRECT）仍可执行 */
+    private suspend fun finishOfflineTurn(user: String, byUserSwitch: Boolean) {
         _state.value = ConvState.Thinking("")
-        val msg = "现在是全离线模式，联网对话已停用；设闹钟、打开应用、定提醒这类系统操作我仍然可以直接执行。"
+        val msg = if (byUserSwitch) {
+            "现在是全离线模式，联网对话已停用；设闹钟、打开应用、定提醒这类系统操作我仍然可以直接执行。"
+        } else {
+            "现在没有网络，联网对话暂时用不了；设闹钟、打开应用、定提醒这类系统操作我仍然可以直接执行。"
+        }
+        tts.enqueue(msg)
+        finishTurnWithAction(user, msg, null)
+    }
+
+    /** R15 未配置 AI 服务兜底：DIRECT 可用，对话引导去设置 */
+    private suspend fun finishNoProviderTurn(user: String) {
+        _state.value = ConvState.Thinking("")
+        val msg = "还没配置 AI 服务，去设置里添加一个就能聊天了；设闹钟、打开应用这类系统操作现在就能用。"
         tts.enqueue(msg)
         finishTurnWithAction(user, msg, null)
     }
@@ -243,6 +267,20 @@ class ConversationEngine @javax.inject.Inject constructor(
         _state.value = ConvState.Transcribing
         val text = asr.transcribe(audio, sampleRate).getOrNull()
         if (text.isNullOrBlank()) {
+            _state.value = ConvState.Failed("", "未能识别语音，请再试一次")
+            return
+        }
+        runTurn(text, apiKey, baseUrl, model)
+    }
+
+    /** R15 系统识别兜底：识别结果直接进对话（无云端 ASR / Provider 未配置时） */
+    suspend fun runRecognizedText(
+        text: String,
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+    ) {
+        if (text.isBlank()) {
             _state.value = ConvState.Failed("", "未能识别语音，请再试一次")
             return
         }
@@ -618,6 +656,9 @@ class ConversationEngine @javax.inject.Inject constructor(
         /** pendingUi 应答哨兵值（非索引非确认，仅表示"用户取消/打断"） */
         const val CANCELLED = "__cancelled__"
         const val CONFIRMED = "1"
+
+        /** R15 弱网：system prompt 追加的短回复约束 */
+        const val WEAK_NET_SUFFIX = "（当前网络信号较弱，请把回答压缩到一两句话内说完。）"
         const val DEFAULT_SYSTEM_PROMPT =
             "你是灵犀，一位简洁温暖、通过语音与人对话的中文助手。" +
                 "回答要口语化、简短、直接说重点，通常不超过三句话；" +

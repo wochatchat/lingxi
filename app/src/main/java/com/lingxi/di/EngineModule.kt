@@ -39,4 +39,9 @@ object EngineModule {
     @Provides
     @Singleton
     fun provideInspectionAgent(impl: com.lingxi.data.agent.LlmInspectionAgent): com.lingxi.data.inspection.InspectionAgent = impl
+
+    /** R15：网络三档状态（引擎断网占位 / 弱网降级 / ASR 降级链共用） */
+    @Provides
+    @Singleton
+    fun provideNetStatus(impl: com.lingxi.data.net.NetworkMonitor): com.lingxi.data.net.NetStatus = impl
 }

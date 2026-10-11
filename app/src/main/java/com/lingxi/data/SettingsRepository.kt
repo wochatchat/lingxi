@@ -95,6 +95,17 @@ class SettingsRepository @javax.inject.Inject constructor(
         context.settingsDataStore.edit { it[lastMorningReportKey] = report }
     }
 
+    // ---- R15 断网缓存：最近一次成功天气（断网/接口挂时晨报回落显示） ----
+
+    private val lastWeatherKey = stringPreferencesKey("last_weather_summary")
+
+    val lastWeather: Flow<String> =
+        context.settingsDataStore.data.map { it[lastWeatherKey] ?: "" }
+
+    suspend fun setLastWeather(summary: String) {
+        context.settingsDataStore.edit { it[lastWeatherKey] = summary }
+    }
+
     suspend fun setCalendarReminderEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[calendarReminderEnabledKey] = enabled }
     }

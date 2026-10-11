@@ -28,6 +28,7 @@ class AndroidActionExecutor @Inject constructor(
     @ApplicationContext private val app: Context,
     private val delegation: com.lingxi.data.delegation.DelegationRepository,
     private val settings: com.lingxi.data.SettingsRepository,
+    private val contacts: ContactResolver,
 ) : ActionExecutor {
 
     override suspend fun execute(toolName: String, argsJson: String): ActionResult {
@@ -317,8 +318,22 @@ class AndroidActionExecutor @Inject constructor(
 
     private fun sendSms(argsJson: String): ActionResult {
         val args = parseArgs(argsJson)
-        val phone = args["phone"]?.trim() ?: return ActionResult.error("缺少 phone 参数")
+        val raw = args["phone"]?.trim() ?: return ActionResult.error("缺少 phone 参数")
         val message = args["message"]?.trim() ?: return ActionResult.error("缺少 message 参数")
+
+        // R15：收件人不是号码（是姓名）→ 通讯录查号（READ_CONTACTS）
+        var display = raw
+        val phone = if (looksLikePhoneNumber(raw)) {
+            raw
+        } else {
+            if (!hasContactsPermission()) {
+                return ActionResult.error("要给联系人发短信需要通讯录权限，请在 设置 → 权限中心 里开启")
+            }
+            val number = runCatching { contacts.numberForName(raw) }.getOrNull()
+                ?: return ActionResult.error("通讯录里没找到「$raw」的电话号码")
+            display = "$raw（$number）"
+            number
+        }
 
         val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$phone")).apply {
             putExtra("sms_body", message)
@@ -326,11 +341,16 @@ class AndroidActionExecutor @Inject constructor(
         }
         return runCatching {
             startActivity(intent)
-            ActionResult.ok("短信已准备好，收件人：$phone，内容：$message", cardTitle = "短信已准备", cardBody = "收件人：$phone\n内容：$message")
+            ActionResult.ok("短信已准备好，收件人：$display，内容：$message", cardTitle = "短信已准备", cardBody = "收件人：$display\n内容：$message")
         }.getOrElse {
             ActionResult.error("无法打开短信：${it.message ?: "系统拒绝"}")
         }
     }
+
+    private fun hasContactsPermission(): Boolean =
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            app, android.Manifest.permission.READ_CONTACTS,
+        ) == PackageManager.PERMISSION_GRANTED
 
     private fun parseArgs(json: String): Map<String, String> {
         return runCatching {
