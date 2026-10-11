@@ -23,6 +23,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
@@ -40,6 +41,9 @@ import com.lingxi.data.TtsEngine
 import com.lingxi.data.VadConfig
 import com.lingxi.data.VadEvent
 import com.lingxi.data.VoiceTurnRunner
+import com.lingxi.data.memory.MemoryRepository
+import com.lingxi.data.memory.Suggestion
+import com.lingxi.data.ProviderRepository
 import com.lingxi.data.rmsOfPcm
 import com.lingxi.data.segmentValid
 import dagger.hilt.android.AndroidEntryPoint
@@ -72,12 +76,18 @@ class FloatingCapsuleService : Service() {
     @Inject lateinit var settings: SettingsRepository
     @Inject lateinit var runner: VoiceTurnRunner
     @Inject lateinit var tts: TtsEngine
+    @Inject lateinit var memoryRepo: MemoryRepository
+    @Inject lateinit var providers: ProviderRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private lateinit var windowManager: WindowManager
     private var capsuleView: TextView? = null
     private var cardView: LinearLayout? = null
+
+    // R17 胶囊侧建议 chips（行为预测）：卡片展开时加载，点选即执行
+    private var chipRow: LinearLayout? = null
+    private var chipScroll: HorizontalScrollView? = null
 
     private var capsuleParams: WindowManager.LayoutParams? = null
     private var cardParams: WindowManager.LayoutParams? = null
@@ -456,6 +466,7 @@ class FloatingCapsuleService : Service() {
             windowManager.addView(card, cardParams)
             cardView = card
             onConvStateChanged(engine.state.value) // 展开即刷当前状态
+            loadSuggestions() // R17：展开时按行为预测加载建议 chips
         } catch (e: Exception) {
             cardView = null
         }
@@ -517,11 +528,110 @@ class FloatingCapsuleService : Service() {
         row.addView(pill("打断") { engine.cancel() })
         row.addView(pill("主界面") { openMain() })
         row.addView(pill("收起") { removeCard() })
+        // R17 行为预测建议 chips：横向一行（空时整行隐藏），点选即执行口令
+        val chips = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            tag = "chips"
+        }
+        val chipsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            visibility = View.GONE
+            addView(chips)
+        }
+        chipRow = chips
+        chipScroll = chipsScroll
         card.addView(title)
         card.addView(body)
         card.addView(mic)
+        card.addView(chipsScroll)
         card.addView(row)
         return card
+    }
+
+    /** R17 建议加载：卡片展开时调用；总开关关闭或无预测 → 不显示 */
+    private fun loadSuggestions() {
+        val scroll = chipScroll ?: return
+        scope.launch {
+            val enabled = runCatching { settings.behaviorSuggestEnabled.first() }.getOrDefault(false)
+            val sugs = if (enabled) {
+                runCatching { memoryRepo.suggestions() }.getOrDefault(emptyList())
+            } else {
+                emptyList()
+            }
+            renderChips(sugs)
+        }
+    }
+
+    /** 建议行渲染：chip 点选即执行，✕ 忽略降权；空则整行隐藏 */
+    private fun renderChips(sugs: List<Suggestion>) {
+        val scroll = chipScroll ?: return
+        val row = chipRow ?: return
+        row.removeAllViews()
+        if (sugs.isEmpty()) {
+            scroll.visibility = View.GONE
+            return
+        }
+        for (s in sugs) row.addView(suggestionChip(s))
+        scroll.visibility = View.VISIBLE
+    }
+
+    private fun suggestionChip(s: Suggestion): View {
+        val item = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            tag = s.action
+            setPadding(dp(10), dp(5), dp(4), dp(6))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(0xFF2A3327.toInt())
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(8) }
+        }
+        val label = TextView(this).apply {
+            text = s.label
+            setTextColor(0xFFCFE8CF.toInt())
+            textSize = 12f
+            setPadding(dp(2), dp(4), dp(2), dp(2))
+            setOnClickListener { onSuggestionTap(s) }
+        }
+        val dismiss = TextView(this).apply {
+            text = "✕"
+            setTextColor(0xFF8A8A8A.toInt())
+            textSize = 12f
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            setOnClickListener { onSuggestionDismiss(s) }
+        }
+        item.addView(label)
+        item.addView(dismiss)
+        return item
+    }
+
+    /** 胶囊 chip 点选：走引擎正常对话管线（行为统计由引擎记录），卡片保留看流式状态 */
+    private fun onSuggestionTap(s: Suggestion) {
+        removeChip(s.action)
+        scope.launch {
+            val provider = runCatching { providers.firstEnabled() }.getOrNull() ?: return@launch
+            val (config, key) = provider
+            engine.runTurn(s.query, key, config.baseUrl, config.model)
+        }
+    }
+
+    /** 胶囊 chip 忽略：本地静默降权 + 从视图移除 */
+    private fun onSuggestionDismiss(s: Suggestion) {
+        scope.launch { runCatching { memoryRepo.recordSuggestionIgnored(s.action, System.currentTimeMillis()) } }
+        removeChip(s.action)
+        val row = chipRow
+        if (row != null && row.childCount == 0) chipScroll?.visibility = View.GONE
+    }
+
+    private fun removeChip(action: String) {
+        val row = chipRow ?: return
+        for (i in row.childCount - 1 downTo 0) {
+            if (row.getChildAt(i).tag == action) row.removeViewAt(i)
+        }
     }
 
     private fun openMain() {
@@ -535,6 +645,8 @@ class FloatingCapsuleService : Service() {
     private fun removeCard() {
         cardView?.let { runCatching { windowManager.removeView(it) } }
         cardView = null
+        chipRow = null
+        chipScroll = null
     }
 
     private fun removeViews() {
