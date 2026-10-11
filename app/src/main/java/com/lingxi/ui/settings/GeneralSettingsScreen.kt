@@ -61,6 +61,9 @@ data class GeneralUiState(
     /** R12 F14 Agent 巡检 */
     val inspectionEnabled: Boolean = false,
     val inspectionIntervalHours: Int = 24,
+    /** R13 行为预测建议 chips + 建议通知 */
+    val behaviorSuggestEnabled: Boolean = false,
+    val suggestionNotifyEnabled: Boolean = false,
 )
 
 private data class BaseFlags(
@@ -82,6 +85,12 @@ private data class ProactiveConfig(
 private data class AgentConfig(
     val inspectionEnabled: Boolean = false,
     val inspectionIntervalHours: Int = 24,
+)
+
+/** R13：行为预测建议配置（独立 combine 组） */
+private data class SuggestConfig(
+    val suggestEnabled: Boolean = false,
+    val notifyEnabled: Boolean = false,
 )
 
 @HiltViewModel
@@ -139,6 +148,8 @@ class GeneralSettingsViewModel @Inject constructor(
     fun setCalendarLeadMinutes(minutes: Int) = viewModelScope.launch { settings.setCalendarLeadMinutes(minutes) }
     fun setInspectionEnabled(enabled: Boolean) = viewModelScope.launch { settings.setInspectionEnabled(enabled) }
     fun setInspectionInterval(hours: Int) = viewModelScope.launch { settings.setInspectionIntervalHours(hours) }
+    fun setBehaviorSuggest(enabled: Boolean) = viewModelScope.launch { settings.setBehaviorSuggestEnabled(enabled) }
+    fun setSuggestionNotify(enabled: Boolean) = viewModelScope.launch { settings.setSuggestionNotifyEnabled(enabled) }
 }
 
 /**
@@ -241,7 +252,30 @@ fun GeneralSettingsScreen(
             MorningReportSection(ui, vm)
             CalendarReminderSection(ui, vm)
             InspectionSection(ui, vm)
+            BehaviorSuggestSection(ui, vm)
         }
+    }
+}
+
+/** R13 行为预测建议：主页「现在可以」chips + 可选通知（全本地统计，默认关防骚扰） */
+@Composable
+private fun BehaviorSuggestSection(ui: GeneralUiState, vm: GeneralSettingsViewModel) {
+    SwitchRow(
+        title = "行为预测建议",
+        subtitle = "灵犀在本地统计你各时段的习惯，主页「现在可以」给出一键建议；忽略的建议自动降权。纯本地统计不上云",
+        checked = ui.behaviorSuggestEnabled,
+        onCheckedChange = { on ->
+            vm.setBehaviorSuggest(on)
+            if (!on) vm.setSuggestionNotify(false)
+        },
+    )
+    if (ui.behaviorSuggestEnabled) {
+        SwitchRow(
+            title = "建议推通知",
+            subtitle = "空闲时段置信度足够高时推送「现在可以」通知；每个建议每天最多提醒一次",
+            checked = ui.suggestionNotifyEnabled,
+            onCheckedChange = { on -> vm.setSuggestionNotify(on) },
+        )
     }
 }
 

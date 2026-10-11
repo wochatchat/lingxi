@@ -85,6 +85,12 @@ class LingXiApp : Application() {
                     else delegation.cancelInspection()
                 }
         }
+        // R13 行为预测建议通知：双开关都开才排周期检查（2h 一查，每动作每天最多一条）
+        appScope.launch {
+            combine(settings.behaviorSuggestEnabled, settings.suggestionNotifyEnabled) { a, b -> a && b }
+                .distinctUntilChanged()
+                .collect { on -> com.lingxi.data.behavior.SuggestionWorker.schedule(this@LingXiApp, on) }
+        }
         // R8 F17 功耗采样：App 进程存活期间记录电量（BATTERY_CHANGED 是粘性广播，进程死掉即停，重启后继续）
         registerReceiver(batteryReceiver, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
         // R11 语音降延迟：启动即预热 TTS 引擎（IO 线程，首次播报省 init 耗时）

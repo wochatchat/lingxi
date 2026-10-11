@@ -15,8 +15,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -49,6 +49,13 @@ data class MemoryUiState(
     val summaries: List<DailySummary> = emptyList(),
 )
 
+data class MemoryUiState(
+    val profile: List<ProfileEntryEntity> = emptyList(),
+    val summaries: List<DailySummary> = emptyList(),
+    /** R13 兴趣画像（top 权重，每日衰减） */
+    val interests: List<com.lingxi.data.memory.InterestStatEntity> = emptyList(),
+)
+
 @HiltViewModel
 class MemoryViewModel @Inject constructor(
     private val memory: MemoryRepository,
@@ -57,7 +64,8 @@ class MemoryViewModel @Inject constructor(
     val state = kotlinx.coroutines.flow.combine(
         memory.profileEntries,
         memory.summariesFlow(),
-    ) { profile, summaries -> MemoryUiState(profile, summaries) }
+        memory.interestsFlow,
+    ) { profile, summaries, interests -> MemoryUiState(profile, summaries, interests) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MemoryUiState())
 
     fun setProfileEnabled(id: Long, enabled: Boolean) =
@@ -68,6 +76,8 @@ class MemoryViewModel @Inject constructor(
     fun clearProfile() = viewModelScope.launch { memory.clearProfile() }
 
     fun clearTurns() = viewModelScope.launch { memory.clearTurns() }
+
+    fun clearInterests() = viewModelScope.launch { memory.clearInterests() }
 }
 
 /**
@@ -152,6 +162,52 @@ fun MemoryScreen(
                     TextButton(onClick = { confirmClear = "turns" }) { Text("清空对话记录") }
                 }
             }
+            // R13 兴趣画像：每日摘要顺带抽取的话题 × 权重（每日衰减，长期不提自然沉底）
+            item {
+                Text(
+                    "兴趣画像（随每日摘要自动挖掘，权重随时间衰减）",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (ui.interests.isEmpty()) {
+                item {
+                    Text(
+                        "还没有兴趣记录。跨天使用后，我会从对话里自动发现你的兴趣话题。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            val maxInterestWeight = ui.interests.firstOrNull()?.weight?.takeIf { it > 0 } ?: 1.0
+            items(ui.interests, key = { it.category }) { interest ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(interest.category, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "命中 ${interest.hitCount} 次",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { (interest.weight / maxInterestWeight).toFloat().coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 6.dp),
+                        )
+                    }
+                }
+            }
+            if (ui.interests.isNotEmpty()) {
+                item {
+                    TextButton(onClick = { confirmClear = "interests" }) { Text("清空兴趣画像") }
+                }
+            }
             item {
                 Text(
                     "每日摘要（自动滚动，保留最近 14 天）",
@@ -183,11 +239,13 @@ fun MemoryScreen(
     if (confirmClear != null) {
         AlertDialog(
             onDismissRequest = { confirmClear = null },
-            title = { Text(if (confirmClear == "turns") "清空对话记录？" else "清空长期画像？") },
+            title = { Text(if (confirmClear == "turns") "清空对话记录？" else if (confirmClear == "interests") "清空兴趣画像？" else "清空长期画像？") },
             text = { Text("该操作不可恢复。") },
             confirmButton = {
                 TextButton(onClick = {
-                    if (confirmClear == "turns") vm.clearTurns() else vm.clearProfile()
+                    if (confirmClear == "turns") vm.clearTurns()
+                    else if (confirmClear == "interests") vm.clearInterests()
+                    else vm.clearProfile()
                     confirmClear = null
                 }) { Text("清空") }
             },

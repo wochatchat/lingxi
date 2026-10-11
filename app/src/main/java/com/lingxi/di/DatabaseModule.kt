@@ -24,7 +24,11 @@ object DatabaseModule {
     @Singleton
     fun provideMemoryDb(@ApplicationContext context: Context): MemoryDb =
         Room.databaseBuilder(context, MemoryDb::class.java, "lingxi_memory.db")
-            .addMigrations(com.lingxi.data.memory.MIGRATION_1_2, com.lingxi.data.memory.MIGRATION_2_3)
+            .addMigrations(
+                com.lingxi.data.memory.MIGRATION_1_2,
+                com.lingxi.data.memory.MIGRATION_2_3,
+                com.lingxi.data.memory.MIGRATION_3_4,
+            )
             .build()
 
     @Provides

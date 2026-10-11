@@ -197,4 +197,24 @@ class SettingsRepository @javax.inject.Inject constructor(
     suspend fun setInspectionIntervalHours(hours: Int) {
         context.settingsDataStore.edit { it[inspectionIntervalHoursKey] = hours.coerceAtLeast(6) }
     }
+
+    // R13 行为预测（总开关默认关，防未卜先知式骚扰）+ 建议通知（默认关）
+    private val behaviorSuggestEnabledKey = booleanPreferencesKey("behavior_suggest_enabled")
+    private val suggestionNotifyEnabledKey = booleanPreferencesKey("suggestion_notify_enabled")
+
+    /** R13 行为预测建议 chips（主页「现在可以」，默认关） */
+    val behaviorSuggestEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[behaviorSuggestEnabledKey] ?: false }
+
+    /** R13 预测建议推通知（需行为预测开启；默认关） */
+    val suggestionNotifyEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[suggestionNotifyEnabledKey] ?: false }
+
+    suspend fun setBehaviorSuggestEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[behaviorSuggestEnabledKey] = enabled }
+    }
+
+    suspend fun setSuggestionNotifyEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[suggestionNotifyEnabledKey] = enabled }
+    }
 }

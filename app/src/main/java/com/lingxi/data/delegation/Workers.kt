@@ -28,6 +28,8 @@ interface WorkerEntryPoint {
     fun checker(): TaskChecker
     /** R12 F14：巡检 agent（LlmInspectionAgent 绑定） */
     fun inspection(): com.lingxi.data.inspection.InspectionAgent
+    /** R13：兴趣/行为统计（晨报产出 → morning_report 行为计数） */
+    fun memory(): com.lingxi.data.memory.MemoryRepository
 }
 
 /** worker 内取依赖入口的小工具 */
@@ -143,6 +145,8 @@ class MorningReportWorker(appContext: Context, params: WorkerParameters) :
             )
             settings.setLastMorningReport(report)
             entry.notifier().post("灵犀晨报", report)
+            // R13 行为统计：晨报产出/打开（本地计数）
+            runCatching { entry.memory().onBehaviorObserved("morning_report", System.currentTimeMillis()) }
             // 自续订：排下一次（开关关闭时由 App 层 cancel，这里不再续排）
             runCatching {
                 val (h, m) = settings.morningReportTime.first().split(":").map { it.trim().toInt() }

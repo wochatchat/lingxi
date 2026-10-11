@@ -70,4 +70,35 @@ interface MemoryDao {
 
     @Query("DELETE FROM profile_entries")
     suspend fun clearProfile()
+
+    // ---- R13 兴趣画像层 ----
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertInterests(entries: List<InterestStatEntity>)
+
+    @Query("SELECT * FROM interest_stats ORDER BY weight DESC")
+    suspend fun allInterests(): List<InterestStatEntity>
+
+    @Query("SELECT * FROM interest_stats ORDER BY weight DESC LIMIT :limit")
+    fun topInterestsFlow(limit: Int): Flow<List<InterestStatEntity>>
+
+    @Query("DELETE FROM interest_stats")
+    suspend fun clearInterests()
+
+    // ---- R13 行为统计（时段 × 星期 × 行为） ----
+
+    @Query(
+        "SELECT * FROM behavior_patterns " +
+            "WHERE hourBucket = :hourBucket AND weekday = :weekday AND action = :action",
+    )
+    suspend fun behaviorRow(hourBucket: Int, weekday: Int, action: String): BehaviorPatternEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertBehavior(row: BehaviorPatternEntity)
+
+    @Query("SELECT * FROM behavior_patterns")
+    suspend fun allBehavior(): List<BehaviorPatternEntity>
+
+    @Query("DELETE FROM behavior_patterns")
+    suspend fun clearBehavior()
 }

@@ -9,9 +9,11 @@ import com.lingxi.data.delegation.DelegationDao
         TurnEntity::class,
         DailySummaryEntity::class,
         ProfileEntryEntity::class,
+        InterestStatEntity::class,
+        BehaviorPatternEntity::class,
         com.lingxi.data.delegation.DelegationTaskEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class MemoryDb : RoomDatabase() {
@@ -42,5 +44,28 @@ val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
     override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE `delegation_tasks` ADD COLUMN `taskType` TEXT NOT NULL DEFAULT 'GENERIC'")
         db.execSQL("ALTER TABLE `delegation_tasks` ADD COLUMN `paramsJson` TEXT NOT NULL DEFAULT '{}'")
+    }
+}
+
+/** v3 → v4：兴趣画像 + 行为统计（R13，全本地统计不上云） */
+val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `interest_stats` (" +
+                "`category` TEXT NOT NULL PRIMARY KEY, " +
+                "`weight` REAL NOT NULL, " +
+                "`hitCount` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `behavior_patterns` (" +
+                "`hourBucket` INTEGER NOT NULL, " +
+                "`weekday` INTEGER NOT NULL, " +
+                "`action` TEXT NOT NULL, " +
+                "`count` INTEGER NOT NULL, " +
+                "`ignoredCount` INTEGER NOT NULL, " +
+                "`lastAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`hourBucket`, `weekday`, `action`))",
+        )
     }
 }

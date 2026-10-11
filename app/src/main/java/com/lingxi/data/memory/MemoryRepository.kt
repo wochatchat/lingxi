@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlin.math.pow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -114,14 +115,89 @@ class MemoryRepository @Inject constructor(
                 temperature = 0.2,
             )
         ) ?: return null
-        val summary = parseDailySummary(reply)
+        // R13 一次 LLM 调用两产出：摘要 + 兴趣话题（控成本，不额外发请求）
+        val (summary, interests) = parseDailySummaryWithInterests(reply)
         if (summary.isBlank()) return null
         withContext(Dispatchers.IO) {
             dao.upsertSummary(DailySummaryEntity(date = date, summary = summary, updatedAt = System.currentTimeMillis()))
             dao.markSummarized(turns.map { it.id })
         }
+        runCatching { recordInterests(interests) }
         return summary
     }
+
+    // ---- R13 兴趣画像：类别 × 权重（每日衰减）× 命中次数 ----
+
+    /** 新话题 +1 权重；存量话题按距上次更新的天数衰减（0.9^天数），长期不提自然沉底 */
+    private suspend fun recordInterests(topics: List<String>) {
+        if (topics.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val existing = dao.allInterests()
+        val updated = mutableListOf<InterestStatEntity>()
+        for (e in existing) {
+            val days = ((now - e.updatedAt) / DAY_MS).coerceAtLeast(0)
+            val weight = e.weight * INTEREST_DECAY_PER_DAY.pow(days.toInt())
+            if (topics.contains(e.category)) {
+                updated += e.copy(
+                    weight = (weight + 1.0).coerceAtMost(MAX_INTEREST_WEIGHT),
+                    hitCount = e.hitCount + 1,
+                    updatedAt = now,
+                )
+            } else {
+                updated += e.copy(weight = weight, updatedAt = now)
+            }
+        }
+        for (topic in topics) {
+            if (existing.any { it.category == topic }) continue
+            updated.add(InterestStatEntity(category = topic, weight = 1.0, hitCount = 1, updatedAt = now))
+        }
+        withContext(Dispatchers.IO) {
+            dao.upsertInterests(updated.filter { it.weight >= INTEREST_PRUNE_FLOOR })
+        }
+    }
+
+    override suspend fun topInterests(limit: Int): List<String> = withContext(Dispatchers.IO) {
+        dao.allInterests().take(limit).map { it.category }
+    }
+
+    val interestsFlow: Flow<List<InterestStatEntity>> = dao.topInterestsFlow(20)
+
+    suspend fun clearInterests() = dao.clearInterests()
+
+    // ---- R13 行为统计与预测建议 ----
+
+    override suspend fun onBehaviorObserved(action: String, atMs: Long) {
+        withContext(Dispatchers.IO) {
+            val bucket = BehaviorPredictor.hourBucket(atMs)
+            val weekday = BehaviorPredictor.weekday(atMs)
+            val row = dao.behaviorRow(bucket, weekday, action)
+            dao.upsertBehavior(
+                row?.copy(count = row.count + 1, lastAt = atMs)
+                    ?: BehaviorPatternEntity(bucket, weekday, action, count = 1, ignoredCount = 0, lastAt = atMs),
+            )
+        }
+    }
+
+    /** 建议被忽略（rotation 过期未点 / 主动关闭）：静默降权 */
+    suspend fun recordSuggestionIgnored(action: String, atMs: Long) {
+        withContext(Dispatchers.IO) {
+            val bucket = BehaviorPredictor.hourBucket(atMs)
+            val weekday = BehaviorPredictor.weekday(atMs)
+            val row = dao.behaviorRow(bucket, weekday, action) ?: return@withContext
+            dao.upsertBehavior(row.copy(ignoredCount = row.ignoredCount + 1))
+        }
+    }
+
+    /** 当前时刻的行为预测建议（主页 chips / 通知共用；总开关由调用方把守） */
+    suspend fun suggestions(nowMs: Long = System.currentTimeMillis()): List<Suggestion> {
+        val rows = withContext(Dispatchers.IO) { dao.allBehavior() }
+        return BehaviorPredictor.suggest(
+            rows.map { BehaviorRow(it.hourBucket, it.weekday, it.action, it.count, it.ignoredCount) },
+            nowMs,
+        )
+    }
+
+    suspend fun clearBehavior() = dao.clearBehavior()
 
     // ---- 管理接口（记忆管理页用） ----
 
@@ -155,6 +231,12 @@ class MemoryRepository @Inject constructor(
         private const val PENDING_LIMIT = 400
         private const val MAX_PENDING_DAYS = 3
 
+        // R13 兴趣画像参数
+        private const val DAY_MS = 24L * 60 * 60 * 1000
+        private const val INTEREST_DECAY_PER_DAY = 0.9
+        private const val MAX_INTEREST_WEIGHT = 50.0
+        private const val INTEREST_PRUNE_FLOOR = 0.05
+
         const val EXTRACT_SYSTEM_PROMPT =
             "你是记忆提取器。从用户对语音助手说的话里，提取一条应当长期记住的关于用户的事实、偏好或称呼指令，" +
                 "改写成一句简洁的第三人称陈述（如「用户希望回答结论先行」「用户名叫阿哲」）。" +
@@ -162,8 +244,10 @@ class MemoryRepository @Inject constructor(
 
         const val SUMMARY_SYSTEM_PROMPT =
             "你是对话摘要器。把用户与语音助手「灵犀」的对话压缩成 3~5 条要点，" +
-                "每条一行以「-」开头，只保留对后续对话有用的信息（用户提到的事实、决定、待办、偏好），" +
-                "不要输出任何其他内容。"
+                "每条一行以「-」开头，只保留对后续对话有用的信息（用户提到的事实、决定、待办、偏好）。" +
+                "最后再输出一行兴趣话题，格式严格为「【兴趣】话题1、话题2、话题3」：" +
+                "从对话里提取用户表现出的兴趣或关注话题（如 健身、基金、露营），没有则省略这一行。" +
+                "除以上内容外不要输出任何其他内容。"
 
         fun todayString(): String =
             SimpleDateFormat("yyyy-MM-dd", Locale.US).format(System.currentTimeMillis())

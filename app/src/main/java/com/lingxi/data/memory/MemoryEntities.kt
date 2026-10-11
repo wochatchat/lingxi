@@ -33,3 +33,26 @@ data class ProfileEntryEntity(
     val createdAt: Long,
     val enabled: Boolean = true,
 )
+
+/** R13 兴趣画像：每日摘要顺带抽取的话题 × 权重（每日衰减）× 命中次数 */
+@Entity(tableName = "interest_stats")
+data class InterestStatEntity(
+    @PrimaryKey val category: String,
+    val weight: Double,
+    val hitCount: Int,
+    val updatedAt: Long,
+)
+
+/** R13 行为统计：时段(2h 桶) × 星期 × 行为 计数（ignoredCount = 建议被忽略次数，用于降权） */
+@Entity(
+    tableName = "behavior_patterns",
+    primaryKeys = ["hourBucket", "weekday", "action"],
+)
+data class BehaviorPatternEntity(
+    val hourBucket: Int,
+    val weekday: Int,
+    val action: String,
+    val count: Int,
+    val ignoredCount: Int,
+    val lastAt: Long,
+)

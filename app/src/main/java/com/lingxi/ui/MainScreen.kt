@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -66,6 +67,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.lingxi.R
 import com.lingxi.data.ConvState
 import com.lingxi.data.ConvTurn
+import com.lingxi.data.memory.Suggestion
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import com.lingxi.data.UiAction
@@ -109,6 +111,12 @@ fun MainScreen(
                 .padding(horizontal = 16.dp),
         ) {
             ConvHistory(history = ui.history, modifier = Modifier.weight(1f))
+            // R13 行为预测建议 chips（「现在可以」：点选执行，X 关闭即降权）
+            SuggestionChips(
+                suggestions = ui.suggestions,
+                onTap = vm::onSuggestionTap,
+                onDismiss = vm::onSuggestionDismiss,
+            )
             PendingUiRow(
                 pending = ui.pending,
                 onChoice = vm::onUiChoice,
@@ -491,6 +499,47 @@ private fun Bubble(text: String, mine: Boolean) {
                     .padding(12.dp)
                     .widthIn(max = 300.dp),
             )
+        }
+    }
+}
+
+/**
+ * R13 行为预测建议 chips：「现在可以」一行横滑建议。
+ * 点选 = 直接执行对应口令；X = 忽略（本地静默降权）。
+ */
+@Composable
+private fun SuggestionChips(
+    suggestions: List<Suggestion>,
+    onTap: (Suggestion) -> Unit,
+    onDismiss: (Suggestion) -> Unit,
+) {
+    if (suggestions.isEmpty()) return
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(suggestions, key = { it.action }) { s ->
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .clickable { onTap(s) }
+                    .padding(start = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    s.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                IconButton(onClick = { onDismiss(s) }, modifier = Modifier.size(28.dp)) {
+                    Text(
+                        "✕",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
         }
     }
 }

@@ -17,6 +17,12 @@ interface MemoryStore {
 
     /** 一轮对话成功完成：落库 + 触发记忆维护（画像提取 / 日滚摘要，内部异步） */
     suspend fun onTurnCompleted(user: String, reply: String)
+
+    /** R13 行为统计：一次可观测行为发生（chat/alarm/search/delegation/morning_report…），本地计数 */
+    suspend fun onBehaviorObserved(action: String, atMs: Long) {}
+
+    /** R13 兴趣画像：权重最高的 N 个兴趣话题（拼进 system prompt） */
+    suspend fun topInterests(limit: Int): List<String> = emptyList()
 }
 
 data class StoredTurn(val user: String, val reply: String)

@@ -3,6 +3,7 @@ package com.lingxi.data
 import com.lingxi.data.functions.ActionExecutor
 import com.lingxi.data.functions.ActionResult
 import com.lingxi.data.functions.ToolDefs
+import com.lingxi.data.memory.BehaviorPredictor
 import com.lingxi.data.memory.MemoryPrompts
 import com.lingxi.data.memory.MemoryStore
 import kotlinx.coroutines.CancellationException
@@ -178,6 +179,8 @@ class ConversationEngine @javax.inject.Inject constructor(
             _history.value = _history.value + ConvTurn(user, replyText, uiActions.toList())
             // F7 三层记忆：落库 + 异步画像提取 / 日滚摘要（失败不影响对话）
             runCatching { memory.onTurnCompleted(user, replyText) }
+            // R13 行为统计：LLM 调用（本地计数，失败不影响对话）
+            runCatching { memory.onBehaviorObserved("chat", System.currentTimeMillis()) }
             _state.value = ConvState.Idle
         } catch (e: CancellationException) {
             tts.stop()
@@ -469,6 +472,8 @@ class ConversationEngine @javax.inject.Inject constructor(
     ) {
         _state.value = ConvState.Thinking("")
         seedFromMemory()
+        // R13 行为统计：DIRECT 动作类型（闹钟/开App/搜索/委托…）
+        runCatching { memory.onBehaviorObserved(BehaviorPredictor.actionForTool(route.toolName), System.currentTimeMillis()) }
         val result = runCatching {
             executor.execute(route.toolName, toJsonArgs(route.args))
         }.getOrElse { ActionResult.error(it.message ?: "执行失败") }
@@ -576,19 +581,21 @@ class ConversationEngine @javax.inject.Inject constructor(
         _history.value = stored.map { ConvTurn(it.user, it.reply) }
     }
 
-    /** system prompt = 基底人格 + 长期画像 + 近期每日摘要（每轮重建，语音编辑即时生效） */
+    /** system prompt = 基底人格 + 长期画像 + 近期每日摘要 + 兴趣画像（每轮重建，语音编辑即时生效） */
     private suspend fun buildMemoryPrompt(): String {
         val profile = runCatching { memory.profileLines() }.getOrDefault(emptyList())
         val summaries = runCatching { memory.recentDailySummaries(RECENT_SUMMARIES) }
             .getOrDefault(emptyList())
             .map { it.date to it.summary }
-        return MemoryPrompts.buildSystemPrompt(DEFAULT_SYSTEM_PROMPT, profile, summaries)
+        val interests = runCatching { memory.topInterests(TOP_INTERESTS) }.getOrDefault(emptyList())
+        return MemoryPrompts.buildSystemPrompt(DEFAULT_SYSTEM_PROMPT, profile, summaries, interests)
     }
 
     companion object {
         private const val MAX_HISTORY = 20
         private const val EAGER_FIRST_CHARS = 12
         private const val RECENT_SUMMARIES = 5
+        private const val TOP_INTERESTS = 3
 
         /** pendingUi 应答哨兵值（非索引非确认，仅表示"用户取消/打断"） */
         const val CANCELLED = "__cancelled__"

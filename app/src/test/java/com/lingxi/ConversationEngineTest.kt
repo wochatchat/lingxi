@@ -65,10 +65,14 @@ class ConversationEngineTest {
         val preloaded: List<StoredTurn> = emptyList(),
     ) : MemoryStore {
         val appended = mutableListOf<Pair<String, String>>()
+        /** R13 行为统计记录（action → 次数） */
+        val behaviors = mutableListOf<String>()
         override suspend fun loadRecentTurns(limit: Int): List<StoredTurn> = preloaded.takeLast(limit)
         override suspend fun profileLines(): List<String> = profile
         override suspend fun recentDailySummaries(limit: Int): List<DailySummary> = summaries.takeLast(limit)
         override suspend fun onTurnCompleted(user: String, reply: String) { appended.add(user to reply) }
+        override suspend fun onBehaviorObserved(action: String, atMs: Long) { behaviors.add(action) }
+        override suspend fun topInterests(limit: Int): List<String> = emptyList()
     }
 
     /** 记录型执行器：可预置队列结果（支持 ChoiceSheet 二次执行场景） */
@@ -234,6 +238,29 @@ class ConversationEngineTest {
         val engine = ConversationEngine(FakeLlm(listOf(LlmEvent.Failed("HTTP 401"))), tts, memory, fakeExecutor(), FakeCaptor())
         engine.runTurn("hi", "k", "u", "m")
         assertEquals(0, memory.appended.size)
+    }
+
+    // ---- R13 行为统计埋点 ----
+
+    @Test
+    fun `对话完成记录 chat 行为`() = runTest {
+        val memory = FakeMemoryStore()
+        val engine = ConversationEngine(
+            FakeLlm(listOf(LlmEvent.Delta("好的。"), LlmEvent.Completed("stop"))),
+            FakeTts(), memory, fakeExecutor(), FakeCaptor(),
+        )
+        engine.runTurn("今天天气怎么样", "k", "u", "m")
+        assertEquals(listOf("chat"), memory.behaviors)
+    }
+
+    @Test
+    fun `DIRECT 闹钟记录 alarm 行为`() = runTest {
+        val ex = FakeExecutor(ActionResult.ok("闹钟已设好"))
+        val memory = FakeMemoryStore()
+        val engine = ConversationEngine(FakeLlm(emptyList()), FakeTts(), memory, ex, FakeCaptor())
+        engine.runTurn("明天八点叫我起床", "k", "u", "m")
+        assertTrue(ex.calls.any { it.first == "set_alarm" })
+        assertTrue(memory.behaviors.contains("alarm"))
     }
 
     // ---- R6 F5 意图路由 + F8 Function Calling ----

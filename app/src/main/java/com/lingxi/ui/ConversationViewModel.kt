@@ -13,6 +13,7 @@ import com.lingxi.data.MicRecorder
 import com.lingxi.data.ProviderRepository
 import com.lingxi.data.UiAction
 import com.lingxi.data.VoiceTurnRunner
+import com.lingxi.data.memory.Suggestion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -43,10 +44,17 @@ class ConversationViewModel @Inject constructor(
     private val repo: ProviderRepository,
     private val engine: ConversationEngine,
     private val runner: VoiceTurnRunner,
+    private val memory: com.lingxi.data.memory.MemoryRepository,
+    private val settings: com.lingxi.data.SettingsRepository,
 ) : AndroidViewModel(application) {
 
     private var recorder: MicRecorder? = null
     private var captureJob: Job? = null
+
+    /** 建议轮换定时器（R13：窗口过期未点选的建议静默降权） */
+    private var rotateJob: Job? = null
+    /** 当前窗口内已点选的行为 id（窗口过期时未点选的静默降权） */
+    private val tappedActions = mutableSetOf<String>()
 
     private val _ui = MutableStateFlow(
         ConvUiState(
@@ -70,6 +78,55 @@ class ConversationViewModel @Inject constructor(
         viewModelScope.launch {
             engine.pendingUi.collect { p -> _ui.value = _ui.value.copy(pending = p) }
         }
+        // R13 行为预测建议：开关开启时按窗口轮换（15min），过期未点选静默降权
+        viewModelScope.launch {
+            settings.behaviorSuggestEnabled.collect { on ->
+                if (on) startSuggestionRotation() else clearSuggestions()
+            }
+        }
+    }
+
+    /** 计算一轮建议并替换窗口（过期未点选的先降权，再清空点选记录） */
+    private suspend fun refreshSuggestions() {
+        val now = System.currentTimeMillis()
+        for (s in _ui.value.suggestions) {
+            if (s.action !in tappedActions) {
+                runCatching { memory.recordSuggestionIgnored(s.action, now) }
+            }
+        }
+        tappedActions.clear()
+        _ui.value = _ui.value.copy(suggestions = runCatching { memory.suggestions(now) }.getOrDefault(emptyList()))
+    }
+
+    private fun startSuggestionRotation() {
+        if (rotateJob?.isActive == true) return
+        rotateJob = viewModelScope.launch {
+            while (true) {
+                refreshSuggestions()
+                kotlinx.coroutines.delay(SUGGESTION_ROTATE_MS)
+            }
+        }
+    }
+
+    /** 用户点选建议 chip：执行对应口令（走正常对话管线，行为统计由引擎记录） */
+    fun onSuggestionTap(s: Suggestion) {
+        tappedActions.add(s.action)
+        _ui.value = _ui.value.copy(suggestions = _ui.value.suggestions - s)
+        sendText(s.query)
+    }
+
+    /** 用户主动关掉某条建议：立即降权 + 从界面移除 */
+    fun onSuggestionDismiss(s: Suggestion) {
+        tappedActions.add(s.action) // 视为已处理，窗口过期时不再二次降权
+        _ui.value = _ui.value.copy(suggestions = _ui.value.suggestions - s)
+        viewModelScope.launch { runCatching { memory.recordSuggestionIgnored(s.action, System.currentTimeMillis()) } }
+    }
+
+    private fun clearSuggestions() {
+        rotateJob?.cancel()
+        rotateJob = null
+        tappedActions.clear()
+        _ui.value = _ui.value.copy(suggestions = emptyList())
     }
 
     private fun hasMicPermission(): Boolean =
@@ -135,6 +192,11 @@ class ConversationViewModel @Inject constructor(
         recorder = null
         _ui.value = _ui.value.copy(recording = false)
         engine.cancel()
+    }
+
+    companion object {
+        /** R13 建议窗口：15 分钟轮换一次（过期未点选静默降权） */
+        private const val SUGGESTION_ROTATE_MS = 15L * 60 * 1000
     }
 
     /** Stream-UI 应答（手势通道）：ChoiceSheet 点选 */

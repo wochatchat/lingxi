@@ -8,12 +8,13 @@ object MemoryPrompts {
 
     /**
      * 三层注入的 system prompt：
-     * 基底人格 + 长期画像（即时生效）+ 近期每日摘要（跨日连续性）。
+     * 基底人格 + 长期画像（即时生效）+ 近期每日摘要（跨日连续性）+ 兴趣画像（R13）。
      */
     fun buildSystemPrompt(
         base: String,
         profileLines: List<String>,
         dailySummaries: List<Pair<String, String>>,
+        interests: List<String> = emptyList(),
     ): String {
         val sb = StringBuilder(base)
         if (profileLines.isNotEmpty()) {
@@ -23,6 +24,10 @@ object MemoryPrompts {
         if (dailySummaries.isNotEmpty()) {
             sb.append("\n\n【近期对话摘要】供延续上下文：\n")
             for ((date, summary) in dailySummaries) sb.append(date).append(": ").append(summary).append('\n')
+        }
+        if (interests.isNotEmpty()) {
+            sb.append("\n\n【用户近期兴趣】可在话题合适时自然提起：")
+            sb.append(interests.joinToString("、")).append('\n')
         }
         return sb.toString()
     }
@@ -67,11 +72,33 @@ fun parseProfileExtraction(reply: String): String? {
 }
 
 /** 解析每日摘要回复：保留要点行，压平成多行文本（上限 maxChars） */
-fun parseDailySummary(reply: String, maxChars: Int = 600): String {
-    val lines = reply.lineSequence()
-        .map { it.trim().trimStart('-', '•', '·', '*', ' ') }
-        .filter { it.isNotBlank() }
-        .toList()
-    val text = lines.joinToString("\n")
-    return if (text.length <= maxChars) text else text.take(maxChars)
+fun parseDailySummary(reply: String, maxChars: Int = 600): String =
+    parseDailySummaryWithInterests(reply, maxChars).first
+
+/**
+ * R13 解析每日摘要回复（摘要 + 兴趣一次产出）：
+ * 约定最后一行形如「【兴趣】话题1、话题2、话题3」，没有则无兴趣产出。
+ * 返回 (摘要文本, 兴趣话题列表)。
+ */
+fun parseDailySummaryWithInterests(
+    reply: String,
+    maxChars: Int = 600,
+): Pair<String, List<String>> {
+    var interests = listOf<String>()
+    val summaryLines = mutableListOf<String>()
+    for (raw in reply.lineSequence()) {
+        val line = raw.trim()
+        if (line.startsWith("【兴趣】")) {
+            interests = line.removePrefix("【兴趣】")
+                .split('、', '，', ',', ';', '；')
+                .map { it.trim().trim('"', '\'', '「', '」', '。', '.') }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .take(5)
+        } else if (line.isNotBlank()) {
+            summaryLines.add(line.trimStart('-', '•', '·', '*', ' '))
+        }
+    }
+    val text = summaryLines.joinToString("\n")
+    return (if (text.length <= maxChars) text else text.take(maxChars)) to interests
 }

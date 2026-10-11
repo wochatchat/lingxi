@@ -3,6 +3,7 @@ package com.lingxi
 import com.lingxi.data.memory.MemoryPrompts
 import com.lingxi.data.memory.ProfileGate
 import com.lingxi.data.memory.parseDailySummary
+import com.lingxi.data.memory.parseDailySummaryWithInterests
 import com.lingxi.data.memory.parseProfileExtraction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -104,5 +105,38 @@ class MemoryPromptsTest {
     @Test
     fun `摘要解析 - 空回复返回空串`() {
         assertEquals("", parseDailySummary("  \n "))
+    }
+
+    // ---- R13 兴趣画像解析 ----
+
+    @Test
+    fun `摘要兴趣解析 - 兴趣行与要点分离`() {
+        val (summary, interests) = parseDailySummaryWithInterests(
+            "- 用户聊了健身计划\n- 用户决定周末露营\n【兴趣】健身、露营、咖啡",
+        )
+        assertEquals("用户聊了健身计划\n用户决定周末露营", summary)
+        assertEquals(listOf("健身", "露营", "咖啡"), interests)
+    }
+
+    @Test
+    fun `摘要兴趣解析 - 无兴趣行返回空列表`() {
+        val (summary, interests) = parseDailySummaryWithInterests("- 要点一")
+        assertEquals("要点一", summary)
+        assertTrue(interests.isEmpty())
+    }
+
+    @Test
+    fun `摘要兴趣解析 - 去重去空限五个`() {
+        val (_, interests) = parseDailySummaryWithInterests(
+            "- 要点\n【兴趣】健身、健身、、理财、读书、跑步、写作、编程",
+        )
+        assertEquals(listOf("健身", "理财", "读书", "跑步", "写作"), interests)
+    }
+
+    @Test
+    fun `系统提示注入兴趣段`() {
+        val p = MemoryPrompts.buildSystemPrompt("基底", emptyList(), emptyList(), listOf("健身", "露营"))
+        assertTrue(p.contains("【用户近期兴趣】"))
+        assertTrue(p.contains("健身、露营"))
     }
 }
