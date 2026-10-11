@@ -50,17 +50,19 @@ class NetworkMonitor @Inject constructor(
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
 
     init {
-        val manager = cm ?: return
-        _tier.value = snapshot(manager)
-        runCatching {
-            manager.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) { refresh(manager) }
-                override fun onLost(network: Network) { refresh(manager) }
-                override fun onCapabilitiesChanged(
-                    network: Network,
-                    networkCapabilities: NetworkCapabilities,
-                ) { refresh(manager) }
-            })
+        val manager = cm
+        if (manager != null) {
+            _tier.value = snapshot(manager)
+            runCatching {
+                manager.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) { refresh(manager) }
+                    override fun onLost(network: Network) { refresh(manager) }
+                    override fun onCapabilitiesChanged(
+                        network: Network,
+                        networkCapabilities: NetworkCapabilities,
+                    ) { refresh(manager) }
+                })
+            }
         }
     }
 
