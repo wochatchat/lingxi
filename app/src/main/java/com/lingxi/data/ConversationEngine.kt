@@ -117,12 +117,6 @@ class ConversationEngine @javax.inject.Inject constructor(
 
             // F5 意图路由：DIRECT 命中 → 零 token 直接执行
             val route = IntentRouter.route(user)
-            // F16/R15 网络三档：断网或全离线 → 联网对话停用；DIRECT 系统动作不受影响
-            val netTier = net.current()
-            if (offlineMode || netTier == NetTier.OFFLINE) {
-                finishOfflineTurn(user, offlineMode)
-                return
-            }
             // F10 截屏问答：确认后随本轮消息多模态上行
             var attachedImages: List<ChatImage> = emptyList()
             when (route) {
@@ -131,6 +125,12 @@ class ConversationEngine @javax.inject.Inject constructor(
                     return
                 }
                 IntentRouter.Route.ToolsLlm, IntentRouter.Route.Chat, IntentRouter.Route.Screenshot -> {
+                    // F16/R15 网络三档：断网或全离线 → 联网对话停用；DIRECT 系统动作不受影响
+                    val netTier = net.current()
+                    if (offlineMode || netTier == NetTier.OFFLINE) {
+                        finishOfflineTurn(user, offlineMode)
+                        return
+                    }
                     // R15：未配置 AI 服务的友好兜底（DIRECT 系统动作不受影响）
                     if (apiKey.isBlank()) {
                         finishNoProviderTurn(user)
@@ -145,7 +145,7 @@ class ConversationEngine @javax.inject.Inject constructor(
             seedFromMemory()
             // R15 弱网：system prompt 追加短回复约束（不另发请求）
             val systemPrompt = buildMemoryPrompt() +
-                if (netTier == NetTier.WEAK) WEAK_NET_SUFFIX else ""
+                if (net.current() == NetTier.WEAK) WEAK_NET_SUFFIX else ""
             val request = buildList {
                 add(ChatMessage("system", systemPrompt))
                 addAll(messages.toList())
