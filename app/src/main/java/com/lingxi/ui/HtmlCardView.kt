@@ -53,7 +53,7 @@ fun GenerativeHtmlCard(action: UiAction, modifier: Modifier = Modifier) {
                         settings.javaScriptEnabled = true
                         settings.allowFileAccess = false
                         settings.allowContentAccess = false
-                        settings.cacheMode = WebView.LOAD_NO_CACHE
+                        settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
                         setBackgroundColor(surfaceArgb)
                         loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
                         webView = this

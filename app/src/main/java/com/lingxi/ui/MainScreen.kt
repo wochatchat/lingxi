@@ -437,7 +437,7 @@ internal fun PendingUiRow(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                UiAction.UiType.InfoCard -> Unit
+                UiAction.UiType.InfoCard, UiAction.UiType.GenerativeHtml -> Unit
             }
         }
     }

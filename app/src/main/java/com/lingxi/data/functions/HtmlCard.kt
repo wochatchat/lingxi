@@ -82,7 +82,8 @@ object HtmlCard {
         val headRegex = Regex("<head\\b[^>]*>", RegexOption.IGNORE_CASE)
         return when {
             headRegex.containsMatchIn(html) ->
-                headRegex.replaceFirst(html) { it.value + CSP_META }
+                headRegex.find(html)?.let { html.replaceRange(it.range, it.value + CSP_META) }
+                    ?: html
             Regex("<html\\b[^>]*>", RegexOption.IGNORE_CASE).containsMatchIn(html) ->
                 html.replace(Regex("<html\\b[^>]*>", RegexOption.IGNORE_CASE)) { m ->
                     m.value + "<head>$CSP_META</head>"
