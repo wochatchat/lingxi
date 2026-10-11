@@ -32,6 +32,8 @@ data class ConvUiState(
     val recording: Boolean = false,
     /** 当前回合等待用户应答的 UI 原语（ChoiceSheet/ConfirmGate） */
     val pending: UiAction? = null,
+    /** R13 行为预测建议 chips（总开关关闭时为空） */
+    val suggestions: List<Suggestion> = emptyList(),
 )
 
 /**
