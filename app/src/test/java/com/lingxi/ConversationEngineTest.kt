@@ -258,7 +258,7 @@ class ConversationEngineTest {
         val ex = FakeExecutor(ActionResult.ok("闹钟已设好"))
         val memory = FakeMemoryStore()
         val engine = ConversationEngine(FakeLlm(emptyList()), FakeTts(), memory, ex, FakeCaptor())
-        engine.runTurn("明天八点叫我起床", "k", "u", "m")
+        engine.runTurn("帮我定一个明早八点的闹钟", "k", "u", "m")
         assertTrue(ex.calls.any { it.first == "set_alarm" })
         assertTrue(memory.behaviors.contains("alarm"))
     }
