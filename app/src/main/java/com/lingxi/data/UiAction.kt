@@ -37,6 +37,8 @@ data class UiAction(
     val progress: Int = -1,
     /** MiniChart 数值序列（R9） */
     val values: List<Float> = emptyList(),
+    /** GenerativeHtml 单文件 HTML（R14，已过白名单消毒 + CSP 注入） */
+    val html: String = "",
 ) {
     /** ParamPanel 单个参数字段 */
     data class ParamField(
@@ -49,6 +51,7 @@ data class UiAction(
     enum class UiType {
         ChoiceSheet, ConfirmGate, InfoCard,
         ParamPanel, ProgressBar, MiniChart, TakeoverPrompt,
+        GenerativeHtml,
     }
 
     companion object {

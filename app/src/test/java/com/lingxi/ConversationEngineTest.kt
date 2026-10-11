@@ -283,6 +283,41 @@ class ConversationEngineTest {
     }
 
     @Test
+    fun `generative_html 工具 - 富卡片消毒后挂到本轮`() = runTest {
+        val tts = FakeTts()
+        val llm = FakeLlm(listOf(
+            LlmEvent.ToolCall(
+                "generative_html",
+                """{"title":"本周步数","html":"<script src='https://evil.com/x.js'></script><img src=\"https://t.com/p.png\"><div style=\"color:red\">步数 8000</div>"}""",
+            ),
+            LlmEvent.Completed("tool_calls"),
+        ))
+        val engine = ConversationEngine(llm, tts, FakeMemoryStore(), fakeExecutor(), FakeCaptor())
+        engine.runTurn("看看我本周步数", "k", "u", "m")
+        val turn = engine.history.value.last()
+        assertEquals(UiAction.UiType.GenerativeHtml, turn.ui.first().type)
+        val html = turn.ui.first().html
+        assertFalse(html.contains("t.com") || html.contains("evil.com"))
+        assertTrue(html.contains("步数 8000"))
+        assertTrue(html.contains("Content-Security-Policy"))
+        assertTrue(tts.spoken.any { it.contains("卡片") })
+    }
+
+    @Test
+    fun `generative_html 参数损坏 - InfoCard 兜底`() = runTest {
+        val tts = FakeTts()
+        val llm = FakeLlm(listOf(
+            LlmEvent.ToolCall("generative_html", """{"title":"t"}"""),
+            LlmEvent.Completed("tool_calls"),
+        ))
+        val engine = ConversationEngine(llm, tts, FakeMemoryStore(), fakeExecutor(), FakeCaptor())
+        engine.runTurn("做个卡片", "k", "u", "m")
+        val turn = engine.history.value.last()
+        assertEquals(UiAction.UiType.InfoCard, turn.ui.first().type)
+        assertEquals("卡片生成失败", turn.ui.first().title)
+    }
+
+    @Test
     fun `DIRECT open_app 多候选 - ChoiceSheet 点选后二次执行`() = runTest {
         val tts = FakeTts()
         val ex = FakeExecutor(

@@ -108,6 +108,22 @@ object ToolDefs {
             """.trimIndent(),
         ),
         ToolSpec(
+            name = "generative_html",
+            description = "生成一张单文件 HTML 富卡片插入对话（表格/图表/时间线/对比卡等结构化展示，纯文本与基础原语表达不了时用）。" +
+                "HTML 必须是内联 CSS/JS 的完整样式片段，禁止任何外部资源引用（http 链接、外链脚本/图片一律不允许），图片只能用 data: URI。" +
+                "可用模板：统计卡片（大数字+标签）、表格、时间线、条形图（div 宽度）、简单 Canvas 图表。深色背景配色（#1B1B1F 底、白色文字）。",
+            parametersJson = """
+                {
+                  "type": "object",
+                  "properties": {
+                    "title": { "type": "string", "description": "卡片标题（中文）" },
+                    "html": { "type": "string", "description": "单文件 HTML 内容（body 片段或完整文档均可，内联 CSS/JS，无外部引用）。建议宽度自适应 300dp、总高不超过 400px" }
+                  },
+                  "required": ["title", "html"]
+                }
+            """.trimIndent(),
+        ),
+        ToolSpec(
             name = "read_screen",
             description = "读取当前屏幕上可见的文字内容（无障碍能力，需用户开启）。用于「这个页面写了什么」「帮我看看屏幕」等场景。无参数。",
             parametersJson = """

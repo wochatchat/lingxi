@@ -1,5 +1,6 @@
 package com.lingxi.service
 
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
@@ -164,6 +165,8 @@ class FloatingCapsuleService : Service() {
         listenJob?.cancel()
         listenJob = null
         scope.cancel()
+        colorAnimator?.cancel()
+        pulseAnimator?.cancel()
         super.onDestroy()
     }
 
@@ -542,9 +545,14 @@ class FloatingCapsuleService : Service() {
 
     // ---------- 状态渲染与通知 ----------
 
+    /** R14 动画句柄：颜色过渡 / 播报态呼吸脉冲 */
+    private var colorAnimator: ValueAnimator? = null
+    private var pulseAnimator: ValueAnimator? = null
+    private var lastCapsuleColor: Int = capsuleColorFor(ConvState.Idle)
+
     /** 引擎状态变化：胶囊变色 + 卡片标题/正文刷新 */
     private fun onConvStateChanged(state: ConvState) {
-        (capsuleView?.background as? GradientDrawable)?.setColor(capsuleColorFor(state))
+        animateCapsuleState(state)
         val card = cardView ?: return
         val title = card.findViewById<TextView>(android.R.id.text1)
         val body = card.findViewById<TextView>(android.R.id.text2) ?: return
@@ -569,6 +577,44 @@ class FloatingCapsuleService : Service() {
                 title?.text = "灵犀 · 出错了"
                 body.text = state.message
             }
+        }
+    }
+
+    /**
+     * R14 胶囊状态形变：颜色 320ms 过渡（capsuleColorLerp 语义）；
+     * Speaking 态呼吸脉冲（capsuleScaleFor），其余态复位 1.0。视图未挂载时只记账。
+     */
+    private fun animateCapsuleState(state: ConvState) {
+        val target = capsuleColorFor(state)
+        val view = capsuleView
+        if (view != null && target != lastCapsuleColor) {
+            colorAnimator?.cancel()
+            colorAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 320
+                addUpdateListener {
+                    (capsuleView?.background as? GradientDrawable)?.setColor(
+                        capsuleColorLerp(lastCapsuleColor, target, it.animatedValue as Float))
+                }
+                start()
+            }
+        }
+        lastCapsuleColor = target
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+        if (state is ConvState.Speaking) {
+            pulseAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 1200
+                repeatCount = ValueAnimator.INFINITE
+                addUpdateListener {
+                    val s = capsuleScaleFor(state, it.animatedValue as Float)
+                    capsuleView?.scaleX = s
+                    capsuleView?.scaleY = s
+                }
+                start()
+            }
+        } else {
+            capsuleView?.scaleX = 1f
+            capsuleView?.scaleY = 1f
         }
     }
 

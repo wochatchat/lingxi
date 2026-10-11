@@ -2,6 +2,7 @@ package com.lingxi.data
 
 import com.lingxi.data.functions.ActionExecutor
 import com.lingxi.data.functions.ActionResult
+import com.lingxi.data.functions.HtmlCard
 import com.lingxi.data.functions.ToolDefs
 import com.lingxi.data.memory.BehaviorPredictor
 import com.lingxi.data.memory.MemoryPrompts
@@ -275,7 +276,7 @@ class ConversationEngine @javax.inject.Inject constructor(
             UiAction.UiType.ParamPanel -> UiAction.parseConfirm(text)?.let { if (it) "1" else "0" }
             UiAction.UiType.TakeoverPrompt -> UiAction.parseConfirm(text)?.let { if (it) "1" else "0" }
             UiAction.UiType.InfoCard -> null
-            UiAction.UiType.ProgressBar, UiAction.UiType.MiniChart -> null
+            UiAction.UiType.ProgressBar, UiAction.UiType.MiniChart, UiAction.UiType.GenerativeHtml -> null
         }
     }
 
@@ -287,6 +288,23 @@ class ConversationEngine @javax.inject.Inject constructor(
         // ui_action 工具：LLM 自发下发 UI 意图（Stream-UI 的 LLM 驱动入口）
         if (ev.name == "ui_action") {
             return showUiAction(ev.argsJson)
+        }
+        // R14 generative_html：LLM 产单文件 HTML → 消毒 + CSP → WebView 富卡片（非打断，无应答）
+        if (ev.name == "generative_html") {
+            val card = HtmlCard.parse(ev.argsJson)?.let { c ->
+                UiAction(
+                    type = UiAction.UiType.GenerativeHtml,
+                    title = c.title,
+                    html = HtmlCard.sanitize(c.html),
+                )
+            } ?: UiAction(
+                type = UiAction.UiType.InfoCard,
+                title = "卡片生成失败",
+                body = "HTML 内容为空或格式不正确",
+            )
+            val spoken = if (card.type == UiAction.UiType.GenerativeHtml) "我做了一张卡片，放在对话里了" else "卡片生成失败了"
+            tts.enqueue(stripMarkdownForSpeech(spoken))
+            return "" to card
         }
         // F9 代点：永远先过确认门（GuardedIO：人按最后一键）
         if (ev.name == "click_ui") {
@@ -448,7 +466,7 @@ class ConversationEngine @javax.inject.Inject constructor(
                 if (answer == "1") "好的，已照你说的发" to action.copy(resolvedText = "已确认发送")
                 else "好的，先存成草稿" to action.copy(resolvedText = "转为草稿")
             }
-            UiAction.UiType.ProgressBar, UiAction.UiType.MiniChart -> "" to action
+            UiAction.UiType.ProgressBar, UiAction.UiType.MiniChart, UiAction.UiType.GenerativeHtml -> "" to action
         }
     }
 

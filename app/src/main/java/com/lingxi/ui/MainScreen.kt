@@ -3,6 +3,19 @@ package com.lingxi.ui
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -164,11 +177,30 @@ private fun ConvHistory(history: List<ConvTurn>, modifier: Modifier = Modifier) 
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(history) { turn ->
-            Bubble(text = turn.user, mine = true)
-            Bubble(text = turn.reply.ifBlank { "（没有回答）" }, mine = false)
-            TurnUiCards(turn.ui)
+            // R14 出入场：slide + fade（新回合整体滑入，含挂靠卡片）
+            EnterAnimated {
+                Column {
+                    Bubble(text = turn.user, mine = true)
+                    Bubble(text = turn.reply.ifBlank { "（没有回答）" }, mine = false)
+                    TurnUiCards(turn.ui)
+                }
+            }
         }
     }
+}
+
+/** R14 入场转场：fade + 上滑（LazyColumn 新 item / 原语卡片通用） */
+@Composable
+private fun EnterAnimated(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val visibleState = remember { MutableTransitionState(false).apply { targetState = true } }
+    AnimatedVisibility(
+        visibleState = visibleState,
+        enter = fadeIn(tween(220)) + slideInVertically(
+            initialOffsetY = { it / 6 },
+            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        ),
+        modifier = modifier,
+    ) { content() }
 }
 
 /** 历史轮次上挂靠的 Stream-UI 卡片（状态即快照，可回放；internal 供 @Preview 沙盒复用） */
@@ -280,6 +312,8 @@ internal fun TurnUiCards(actions: List<UiAction>) {
                     }
                 }
             }
+            // R14 generative_html：WebView 富卡片（内部滚动，高度固定）
+            UiAction.UiType.GenerativeHtml -> GenerativeHtmlCard(action, modifier = Modifier)
             UiAction.UiType.TakeoverPrompt -> Card(
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
@@ -513,8 +547,16 @@ private fun SuggestionChips(
     onTap: (Suggestion) -> Unit,
     onDismiss: (Suggestion) -> Unit,
 ) {
-    if (suggestions.isEmpty()) return
-    LazyRow(
+    val chipsVisible = suggestions.isNotEmpty()
+    // R14 弹入：spring 缩放 + 淡入（出现/消失有过渡，避免 chips 突兀闪现）
+    AnimatedVisibility(
+        visible = chipsVisible,
+        enter = scaleIn(
+            initialScale = 0.6f,
+            animationSpec = spring(dampingRatio = 0.45f, stiffness = 320f),
+        ) + fadeIn(tween(150)),
+    ) {
+        LazyRow(
         modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -541,6 +583,7 @@ private fun SuggestionChips(
                 }
             }
         }
+        }
     }
 }
 
@@ -554,13 +597,33 @@ private fun StateLine(state: ConvState) {
         else -> ""
     }
     if (text.isEmpty()) return
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = if (state is ConvState.Failed) MaterialTheme.colorScheme.error
-        else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 4.dp),
-    )
+    // R14 流式打字光标：Thinking 有部分文本时闪烁「▌」
+    val streaming = state is ConvState.Thinking && state.partial.isNotBlank()
+    val cursorAlpha = if (streaming) {
+        rememberInfiniteTransition(label = "cursor").animateFloat(
+            initialValue = 0.15f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(550, easing = LinearEasing), RepeatMode.Reverse),
+            label = "cursorAlpha",
+        ).value
+    } else 1f
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (state is ConvState.Failed) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f, fill = false).padding(vertical = 4.dp),
+        )
+        if (streaming) {
+            Text(
+                text = "▌",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = cursorAlpha),
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+    }
 }
 
 /**
