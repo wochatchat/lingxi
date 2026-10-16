@@ -2,6 +2,7 @@ package com.lingxi
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
@@ -51,6 +52,10 @@ private fun RootRoute(settings: SettingsRepository) {
         if (!settings.firstLaunchDone.first()) screen = Screen.ONBOARD
         else if (screen == Screen.LOADING) screen = Screen.HOME
     }
+    // 系统返回键：子页面返回主页而不是退出 App（主页保持默认行为；弹窗打开时返回先关弹窗——Dialog 是独立窗口，不经过这里）
+    BackHandler(
+        enabled = screen != Screen.HOME && screen != Screen.LOADING && screen != Screen.ONBOARD,
+    ) { screen = Screen.HOME }
     when (screen) {
         Screen.LOADING -> Unit
         Screen.ONBOARD -> FirstRunGuideScreen(

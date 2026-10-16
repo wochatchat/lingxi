@@ -2,12 +2,17 @@ package com.lingxi.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -26,10 +31,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -251,14 +260,13 @@ private fun kindLabel(kind: ProviderKind): String = when (kind) {
     ProviderKind.LOCAL -> "本地"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ProviderEditDialog(
     existing: ProviderConfig?,
     viewModel: ProvidersViewModel,
     onDismiss: () -> Unit,
 ) {
-    // 预设选择（仅新增时展示）；编辑时字段独立
     var selectedPresetKey by remember { mutableStateOf<String?>(null) }
     val initial = existing
     var name by remember { mutableStateOf(initial?.name ?: "") }
@@ -268,6 +276,16 @@ private fun ProviderEditDialog(
     var kind by remember { mutableStateOf(initial?.kind ?: ProviderKind.CLOUD) }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
+    val canSubmit = name.isNotBlank() && baseUrl.isNotBlank() && model.isNotBlank()
+
+    fun currentConfig() = com.lingxi.data.ProviderConfig(
+        id = existing?.id ?: com.lingxi.data.newProviderId(),
+        name = name.trim(),
+        kind = kind,
+        baseUrl = com.lingxi.data.normalizeBaseUrl(baseUrl),
+        model = model.trim(),
+        enabled = existing?.enabled ?: true,
+    )
 
     fun applyPreset(key: String) {
         selectedPresetKey = key
@@ -280,117 +298,136 @@ private fun ProviderEditDialog(
         testResult = null
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "添加 AI 服务" else "编辑 ${existing.name}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (existing == null) {
-                    Text("选预设：", style = MaterialTheme.typography.labelMedium)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        // 第一行：云厂商常用
-                        listOf("deepseek", "kimi", "qwen", "openai").forEach { key ->
-                            FilterChip(
-                                selected = selectedPresetKey == key,
-                                onClick = { applyPreset(key) },
-                                label = { Text(presetLabel(key)) },
-                            )
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+        ),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.9f),
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
+            ) {
+                Text(
+                    text = if (existing == null) "添加 AI 服务" else "编辑 ${existing.name}",
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (existing == null) {
+                        Text("选择预设", style = MaterialTheme.typography.labelLarge)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            maxItemsInEachRow = 3,
+                        ) {
+                            listOf("deepseek", "kimi", "qwen", "openai", "zhipu", "doubao", "ollama", "custom")
+                                .forEach { key ->
+                                    FilterChip(
+                                        selected = selectedPresetKey == key,
+                                        onClick = { applyPreset(key) },
+                                        label = { Text(presetLabel(key)) },
+                                    )
+                                }
                         }
                     }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        listOf("zhipu", "doubao", "ollama", "custom").forEach { key ->
-                            FilterChip(
-                                selected = selectedPresetKey == key,
-                                onClick = { applyPreset(key) },
-                                label = { Text(presetLabel(key)) },
-                            )
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("名称") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = baseUrl,
-                    onValueChange = { baseUrl = it; testResult = null },
-                    label = { Text("Base URL") },
-                    placeholder = { Text("https://your-gateway.com/v1") },
-                    supportingText = { Text("OpenAI-compatible 根路径，需含 /v1 等版本段") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (kind != ProviderKind.LOCAL) {
                     OutlinedTextField(
-                        value = apiKey,
-                        onValueChange = { apiKey = it },
-                        label = { Text("API Key") },
-                        supportingText = { Text(if (apiKey.isBlank()) "" else maskKey(apiKey)) },
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("名称") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                }
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = { model = it },
-                    label = { Text("模型") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                testResult?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (it.startsWith("✓")) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.error,
+                    OutlinedTextField(
+                        value = baseUrl,
+                        onValueChange = { baseUrl = it; testResult = null },
+                        label = { Text("Base URL") },
+                        placeholder = { Text("https://your-gateway.com/v1") },
+                        supportingText = { Text("OpenAI-compatible 根路径，需含 /v1 等版本段") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                enabled = name.isNotBlank() && baseUrl.isNotBlank() && model.isNotBlank() && !testing,
-                onClick = {
-                    testing = true
-                    testResult = null
-                    val config = com.lingxi.data.ProviderConfig(
-                        id = existing?.id ?: com.lingxi.data.newProviderId(),
-                        name = name.trim(),
-                        kind = kind,
-                        baseUrl = com.lingxi.data.normalizeBaseUrl(baseUrl),
-                        model = model.trim(),
-                        enabled = existing?.enabled ?: true,
-                    )
-                    viewModel.upsert(config, apiKey.trim().takeIf { it.isNotBlank() })
-                    viewModel.test(config, apiKey.trim()) { r ->
-                        testing = false
-                        testResult = r.fold(
-                            onSuccess = { "✓ 连接成功：$it" },
-                            onFailure = { "✗ ${it.message}" },
+                    if (kind != ProviderKind.LOCAL) {
+                        OutlinedTextField(
+                            value = apiKey,
+                            onValueChange = { apiKey = it; testResult = null },
+                            label = { Text("API Key") },
+                            supportingText = { Text(if (apiKey.isBlank()) "可留空，保存后再补充" else maskKey(apiKey)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                },
-            ) {
-                if (testing) {
-                    CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("测试连接")
+                    OutlinedTextField(
+                        value = model,
+                        onValueChange = { model = it; testResult = null },
+                        label = { Text("模型") },
+                        placeholder = { Text("例如：deepseek-chat") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    testResult?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (it.startsWith("✓")) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消") }
+                    OutlinedButton(
+                        enabled = canSubmit && !testing,
+                        onClick = {
+                            testing = true
+                            testResult = null
+                            viewModel.test(currentConfig(), apiKey.trim()) { result ->
+                                testing = false
+                                testResult = result.fold(
+                                    onSuccess = { "✓ 连接成功：$it" },
+                                    onFailure = { "✗ ${it.message ?: "连接失败"}" },
+                                )
+                            }
+                        },
+                    ) {
+                        if (testing) {
+                            CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("测试连接")
+                        }
+                    }
+                    Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                    Button(
+                        enabled = canSubmit && !testing,
+                        onClick = {
+                            viewModel.upsert(currentConfig(), apiKey.trim().takeIf { it.isNotBlank() })
+                            onDismiss()
+                        },
+                    ) { Text("保存") }
                 }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(if (existing == null) "取消" else "完成") }
-        },
-    )
+        }
+    }
 }
 
 private fun presetLabel(key: String): String =
