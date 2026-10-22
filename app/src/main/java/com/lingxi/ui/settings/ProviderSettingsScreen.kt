@@ -40,7 +40,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,17 +52,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.lingxi.data.ProviderCatalog
 import com.lingxi.data.ProviderConfig
 import com.lingxi.data.ProviderKind
-import com.lingxi.data.ProviderPreset
 import com.lingxi.data.ProviderRepository
-import com.lingxi.data.defaultHttpClient
 import com.lingxi.data.maskKey
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -98,36 +92,6 @@ class ProvidersViewModel @Inject constructor(
     /** F18：导出配置 JSON（不含 Key） */
     fun exportConfigs(onResult: (String) -> Unit) =
         viewModelScope.launch { onResult(repo.exportConfigsJson()) }
-
-    // ── 预设目录：网络拉取，内置列表仅离线兜底 ──
-    private val _presetSource = MutableStateFlow<PresetSource>(PresetSource.Loading)
-    val presetSource: StateFlow<PresetSource> = _presetSource
-    private var cachedRemote: List<ProviderPreset>? = null
-
-    fun loadPresets(force: Boolean = false) {
-        if (_presetSource.value is PresetSource.Ready && !force) return
-        if (force) cachedRemote = null
-        cachedRemote?.let { _presetSource.value = PresetSource.Ready(it, fromNetwork = true); return }
-        _presetSource.value = PresetSource.Loading
-        viewModelScope.launch {
-            val remote = ProviderCatalog.fetch(defaultHttpClient())
-            if (remote != null) {
-                cachedRemote = remote
-                _presetSource.value = PresetSource.Ready(remote, fromNetwork = true)
-            } else {
-                _presetSource.value = PresetSource.Ready(
-                    com.lingxi.data.PROVIDER_PRESETS,
-                    fromNetwork = false,
-                )
-            }
-        }
-    }
-}
-
-/** 预设目录加载状态：Loading / Ready（fromNetwork=false 表示离线回落内置） */
-sealed interface PresetSource {
-    data object Loading : PresetSource
-    data class Ready(val presets: List<ProviderPreset>, val fromNetwork: Boolean) : PresetSource
 }
 
 /** Provider 配置中心（F6）：云厂商 / 中转站 / 本地 Ollama 统一配置 */
@@ -323,8 +287,10 @@ private fun ProviderEditDialog(
         enabled = existing?.enabled ?: true,
     )
 
-    fun applyPreset(preset: ProviderPreset) {
-        selectedPresetKey = preset.key
+    fun applyPreset(key: String) {
+        selectedPresetKey = key
+        val preset = com.lingxi.data.PROVIDER_PRESETS.firstOrNull { it.key == key }
+            ?: com.lingxi.data.CUSTOM_PRESET
         name = if (preset.key == "custom") "" else preset.label
         baseUrl = preset.baseUrl
         model = preset.model
@@ -364,63 +330,21 @@ private fun ProviderEditDialog(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     if (existing == null) {
-                        val source by viewModel.presetSource.collectAsState()
-                        LaunchedEffect(Unit) { viewModel.loadPresets() }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("选择预设", style = MaterialTheme.typography.labelLarge)
-                            Spacer(modifier = Modifier.weight(1f))
-                            when (val s = source) {
-                                is PresetSource.Ready -> if (s.fromNetwork) {
-                                    Text(
-                                        "已联网加载",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                } else {
-                                    TextButton(onClick = { viewModel.loadPresets(force = true) }) {
-                                        Text("重试", style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
-                                PresetSource.Loading -> CircularProgressIndicator(
-                                    modifier = Modifier.height(16.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                            }
-                        }
-                        when (val s = source) {
-                            is PresetSource.Ready -> {
-                                if (!s.fromNetwork) {
-                                    Text(
-                                        "网络加载失败，当前为内置预设",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                }
-                                FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                maxItemsInEachRow = 3,
-                            ) {
-                                s.presets.forEach { preset ->
+                        Text("选择预设", style = MaterialTheme.typography.labelLarge)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            maxItemsInEachRow = 3,
+                        ) {
+                            listOf("deepseek", "kimi", "qwen", "openai", "zhipu", "doubao", "ollama", "custom")
+                                .forEach { key ->
                                     FilterChip(
-                                        selected = selectedPresetKey == preset.key,
-                                        onClick = { applyPreset(preset) },
-                                        label = { Text(preset.label) },
+                                        selected = selectedPresetKey == key,
+                                        onClick = { applyPreset(key) },
+                                        label = { Text(presetLabel(key)) },
                                     )
                                 }
-                                FilterChip(
-                                    selected = selectedPresetKey == com.lingxi.data.CUSTOM_PRESET.key,
-                                    onClick = { applyPreset(com.lingxi.data.CUSTOM_PRESET) },
-                                    label = { Text(com.lingxi.data.CUSTOM_PRESET.label) },
-                                )
-                            }
-                            }
-                            PresetSource.Loading -> Text(
-                                "正在从网络获取 AI 服务目录…",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
                     OutlinedTextField(
@@ -505,3 +429,7 @@ private fun ProviderEditDialog(
         }
     }
 }
+
+private fun presetLabel(key: String): String =
+    (com.lingxi.data.PROVIDER_PRESETS + com.lingxi.data.CUSTOM_PRESET)
+        .firstOrNull { it.key == key }?.label ?: key
