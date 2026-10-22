@@ -136,4 +136,40 @@ class ProviderRepository @javax.inject.Inject constructor(
             }
         } ?: Result.failure(Exception("连接超时（20s）"))
     }
+
+    /**
+     * 拉取服务商可用模型列表：OpenAI-compatible GET {baseUrl}/models。
+     * 响应形如 {"data":[{"id":"deepseek-chat"},…]}；解析失败的单条跳过，
+     * 非法响应整包失败由调用方回落手动输入。
+     */
+    suspend fun fetchModels(config: ProviderConfig, apiKey: String): Result<List<String>> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val key = apiKey.ifBlank { getApiKey(config.id) }
+                val req = okhttp3.Request.Builder()
+                    .url(modelsUrl(config.baseUrl))
+                    .apply { if (key.isNotBlank()) header("Authorization", "Bearer $key") }
+                    .build()
+                defaultHttpClient().newCall(req).execute().use { resp ->
+                    val body = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) error("HTTP ${resp.code}")
+                    parseModelsResponse(body)
+                }
+            }
+        }
 }
+
+/** OpenAI-compatible 模型列表端点：{根路径}/models（去尾部斜杠，不重复拼 /v1） */
+fun modelsUrl(baseUrl: String): String =
+    "${normalizeBaseUrl(baseUrl).removeSuffix("/models")}/models"
+
+/** 解析 /models 响应：取 data[].id，去空去重保序；结构不符返回空列表 */
+fun parseModelsResponse(raw: String): List<String> = runCatching {
+    val root = kotlinx.serialization.json.Json.parseToJsonElement(raw)
+    val arr = (root as? kotlinx.serialization.json.JsonObject)?.get("data")
+        as? kotlinx.serialization.json.JsonArray ?: return@runCatching emptyList()
+    arr.mapNotNull { el ->
+        (el as? kotlinx.serialization.json.JsonObject)?.get("id")
+            ?.let { it as? kotlinx.serialization.json.JsonPrimitive }?.content
+    }.filter { it.isNotBlank() }.distinct()
+}.getOrDefault(emptyList())

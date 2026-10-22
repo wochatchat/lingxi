@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -82,6 +83,10 @@ class ProvidersViewModel @Inject constructor(
 
     fun test(config: ProviderConfig, apiKey: String, onResult: (Result<String>) -> Unit) =
         viewModelScope.launch { onResult(repo.testConnection(config, apiKey)) }
+
+    /** 从服务商拉取可用模型列表（OpenAI-compatible /models） */
+    fun fetchModels(config: ProviderConfig, apiKey: String, onResult: (Result<List<String>>) -> Unit) =
+        viewModelScope.launch { onResult(repo.fetchModels(config, apiKey)) }
 
     fun apiKeyOf(id: String): String = repo.getApiKey(id)
 
@@ -276,6 +281,11 @@ private fun ProviderEditDialog(
     var kind by remember { mutableStateOf(initial?.kind ?: ProviderKind.CLOUD) }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
+    // 模型列表联网拉取：null=未拉取；空列表=拉取成功但无数据
+    var remoteModels by remember { mutableStateOf<List<String>?>(null) }
+    var modelsLoading by remember { mutableStateOf(false) }
+    var modelsNote by remember { mutableStateOf<String?>(null) }
+    var modelsMenu by remember { mutableStateOf(false) }
     val canSubmit = name.isNotBlank() && baseUrl.isNotBlank() && model.isNotBlank()
 
     fun currentConfig() = com.lingxi.data.ProviderConfig(
@@ -296,6 +306,9 @@ private fun ProviderEditDialog(
         model = preset.model
         kind = preset.kind
         testResult = null
+        remoteModels = null
+        modelsNote = null
+        modelsMenu = false
     }
 
     Dialog(
@@ -356,7 +369,13 @@ private fun ProviderEditDialog(
                     )
                     OutlinedTextField(
                         value = baseUrl,
-                        onValueChange = { baseUrl = it; testResult = null },
+                        onValueChange = {
+                            baseUrl = it
+                            testResult = null
+                            remoteModels = null
+                            modelsNote = null
+                            modelsMenu = false
+                        },
                         label = { Text("Base URL") },
                         placeholder = { Text("https://your-gateway.com/v1") },
                         supportingText = { Text("OpenAI-compatible 根路径，需含 /v1 等版本段") },
@@ -373,14 +392,82 @@ private fun ProviderEditDialog(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    OutlinedTextField(
-                        value = model,
-                        onValueChange = { model = it; testResult = null },
-                        label = { Text("模型") },
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = model,
+                            onValueChange = { model = it; testResult = null },
+                            label = { Text("模型") },
                         placeholder = { Text("例如：deepseek-chat") },
                         singleLine = true,
+                        trailingIcon = {
+                            IconButton(
+                                enabled = baseUrl.isNotBlank() && !modelsLoading,
+                                onClick = {
+                                    modelsLoading = true
+                                    modelsNote = null
+                                    remoteModels = null
+                                    modelsMenu = false
+                                    viewModel.fetchModels(currentConfig(), apiKey.trim()) { result ->
+                                        modelsLoading = false
+                                        result.fold(
+                                            onSuccess = { list ->
+                                                remoteModels = list
+                                                modelsNote = if (list.isEmpty()) "未获取到模型（可手动输入）" else "已拉取 ${list.size} 个模型"
+                                                modelsMenu = list.isNotEmpty()
+                                            },
+                                            onFailure = { modelsNote = "拉取失败：${it.message ?: "网络错误"}" },
+                                        )
+                                    }
+                                },
+                            ) {
+                                if (modelsLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Filled.Refresh, contentDescription = "拉取模型列表")
+                                }
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    // 模型下拉建议：按已输入文本过滤，点选回填
+                    if (modelsMenu && !remoteModels.isNullOrEmpty()) {
+                        val query = model.trim()
+                        val filtered = remoteModels!!.filter { query.isBlank() || it.contains(query, ignoreCase = true) }
+                        if (filtered.isNotEmpty()) {
+                            androidx.compose.material3.DropdownMenu(
+                                expanded = true,
+                                onDismissRequest = { modelsMenu = false },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                filtered.take(50).forEach { m ->
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text(m, maxLines = 1) },
+                                        onClick = {
+                                            model = m
+                                            modelsMenu = false
+                                            testResult = null
+                                        },
+                                    )
+                                }
+                                if (filtered.size > 50) {
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("…仅显示前 50 个，输入关键字过滤", style = MaterialTheme.typography.labelSmall) },
+                                        onClick = {},
+                                        enabled = false,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    modelsNote?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (it.startsWith("已拉取")) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    } // Box（模型输入 + 下拉建议）
                     testResult?.let {
                         Text(
                             it,
